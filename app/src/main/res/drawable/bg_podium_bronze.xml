@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- bg_podium_bronze.xml — Location: app/src/main/res/drawable/ -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#CD7F32"/>
+    <corners android:topLeftRadius="8dp" android:topRightRadius="8dp"/>
+</shape>

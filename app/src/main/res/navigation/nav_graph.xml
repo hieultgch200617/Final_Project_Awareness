@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/academyFragment">
+
+    <!-- ── Tab 1: Academy ───────────────────────────────────────── -->
+    <fragment
+        android:id="@+id/academyFragment"
+        android:name="com.awareness.app.ui.academy.AcademyFragment"
+        android:label="Academy">
+
+        <!-- Tapping a lesson card → LessonDetailFragment -->
+        <action
+            android:id="@+id/action_academy_to_lessonDetail"
+            app:destination="@id/lessonDetailFragment" />
+
+        <!-- Tapping Scam Lab banner → ScamLabFragment -->
+        <action
+            android:id="@+id/action_academy_to_scamLab"
+            app:destination="@id/scamLabFragment" />
+
+        <!-- Tapping Daily Quiz notification → QuizFragment -->
+        <action
+            android:id="@+id/action_academy_to_quiz"
+            app:destination="@id/quizFragment" />
+    </fragment>
+
+    <!-- Lesson Detail screen (opened from Academy) -->
+    <fragment
+        android:id="@+id/lessonDetailFragment"
+        android:name="com.awareness.app.ui.academy.LessonDetailFragment"
+        android:label="Lesson">
+        <!-- Pass the lesson's Firestore document ID as an argument -->
+        <argument
+            android:name="lessonId"
+            app:argType="string" />
+    </fragment>
+
+    <!-- Scam Lab simulation screen -->
+    <fragment
+        android:id="@+id/scamLabFragment"
+        android:name="com.awareness.app.ui.academy.ScamLabFragment"
+        android:label="Scam Lab" />
+
+    <!-- Daily Quiz screen -->
+    <fragment
+        android:id="@+id/quizFragment"
+        android:name="com.awareness.app.ui.academy.QuizFragment"
+        android:label="Daily Quiz" />
+
+    <!-- ── Tab 2: Guardian Tools ─────────────────────────────────── -->
+    <fragment
+        android:id="@+id/guardianFragment"
+        android:name="com.awareness.app.ui.guardian.GuardianFragment"
+        android:label="Guardian Tools" />
+
+    <!-- ── Tab 3: Community ──────────────────────────────────────── -->
+    <fragment
+        android:id="@+id/communityFragment"
+        android:name="com.awareness.app.ui.community.CommunityFragment"
+        android:label="Community" />
+
+    <!-- ── Tab 4: Profile ────────────────────────────────────────── -->
+    <fragment
+        android:id="@+id/profileFragment"
+        android:name="com.awareness.app.ui.profile.ProfileFragment"
+        android:label="Profile" />
+
+    <!-- Leaderboard (opened from Profile or Academy) -->
+    <fragment
+        android:id="@+id/leaderboardFragment"
+        android:name="com.awareness.app.ui.leaderboard.LeaderboardFragment"
+        android:label="Leaderboard" />
+
+</navigation>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/dashboardFragment"
+        android:icon="@drawable/ic_dashboard"
+        android:title="Dashboard"/>
+
+    <item
+        android:id="@+id/cmsFragment"
+        android:icon="@drawable/ic_edit"
+        android:title="Content"/>
+
+    <item
+        android:id="@+id/userManagementFragment"
+        android:icon="@drawable/ic_people"
+        android:title="Users"/>
+
+    <item
+        android:id="@+id/apiHealthFragment"
+        android:icon="@drawable/ic_monitor"
+        android:title="API Health"/>
+
+</menu>

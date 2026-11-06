@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <!-- AppBar -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/brand_navy"
+        app:elevation="0dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:title="🏆 Leaderboard"
+            app:navigationIcon="@drawable/ic_arrow_back"
+            app:navigationIconTint="@color/white"
+            app:titleTextColor="@color/white"
+            app:titleTextAppearance="@style/ToolbarTitleStyle"/>
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- ── Loading State ─────────────────────────────────── -->
+            <ProgressBar
+                android:id="@+id/progressBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="80dp"
+                android:visibility="visible"/>
+
+            <!-- ── Main Content (hidden while loading) ───────────── -->
+            <LinearLayout
+                android:id="@+id/layoutContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- ════════════════════════════════════════════════ -->
+                <!--  PODIUM — Top 3 users                           -->
+                <!-- ════════════════════════════════════════════════ -->
+
+                <!-- Navy background block for the podium -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@color/brand_navy"
+                    android:paddingBottom="32dp"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="Top Guardians"
+                        android:textColor="@color/brand_blue_light"
+                        android:textSize="13sp"
+                        android:fontFamily="@font/poppins_medium"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="20dp"/>
+
+                    <!-- Podium row: 2nd | 1st | 3rd -->
+                    <!-- 1st is taller to visually represent the podium height -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="bottom"
+                        android:paddingHorizontal="16dp">
+
+                        <!-- ── 2nd Place ────────────────────────── -->
+                        <LinearLayout
+                            android:id="@+id/layoutPodium2"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:layout_marginEnd="4dp">
+
+                            <!-- Crown / medal -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="🥈"
+                                android:textSize="24sp"
+                                android:layout_marginBottom="6dp"/>
+
+                            <!-- Avatar circle -->
+                            <TextView
+                                android:id="@+id/tvAvatar2"
+                                android:layout_width="52dp"
+                                android:layout_height="52dp"
+                                android:layout_gravity="center"
+                                android:text="?"
+                                android:textColor="@color/white"
+                                android:textSize="20sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:background="@drawable/bg_avatar_silver"
+                                android:fontFamily="@font/poppins_bold"/>
+
+                            <TextView
+                                android:id="@+id/tvName2"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="—"
+                                android:textColor="@color/white"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/poppins_semibold"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:ellipsize="end"
+                                android:layout_marginTop="6dp"/>
+
+                            <TextView
+                                android:id="@+id/tvXp2"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="0 XP"
+                                android:textColor="@color/brand_blue_light"
+                                android:textSize="11sp"
+                                android:fontFamily="@font/poppins_regular"/>
+
+                            <!-- Podium block (shorter) -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="56dp"
+                                android:background="@drawable/bg_podium_silver"
+                                android:gravity="center"
+                                android:layout_marginTop="8dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="2"
+                                    android:textColor="@color/white"
+                                    android:textSize="20sp"
+                                    android:fontFamily="@font/poppins_bold"/>
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                        <!-- ── 1st Place (center, tallest) ─────── -->
+                        <LinearLayout
+                            android:id="@+id/layoutPodium1"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:paddingHorizontal="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="👑"
+                                android:textSize="28sp"
+                                android:layout_marginBottom="6dp"/>
+
+                            <!-- Avatar circle — larger for 1st -->
+                            <TextView
+                                android:id="@+id/tvAvatar1"
+                                android:layout_width="64dp"
+                                android:layout_height="64dp"
+                                android:layout_gravity="center"
+                                android:text="?"
+                                android:textColor="@color/white"
+                                android:textSize="24sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:background="@drawable/bg_avatar_gold"
+                                android:fontFamily="@font/poppins_bold"/>
+
+                            <TextView
+                                android:id="@+id/tvName1"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="—"
+                                android:textColor="@color/white"
+                                android:textSize="13sp"
+                                android:fontFamily="@font/poppins_bold"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:ellipsize="end"
+                                android:layout_marginTop="6dp"/>
+
+                            <TextView
+                                android:id="@+id/tvXp1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="0 XP"
+                                android:textColor="@color/xp_gold"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/poppins_semibold"/>
+
+                            <!-- Podium block (tallest) -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="80dp"
+                                android:background="@drawable/bg_podium_gold"
+                                android:gravity="center"
+                                android:layout_marginTop="8dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="1"
+                                    android:textColor="@color/white"
+                                    android:textSize="24sp"
+                                    android:fontFamily="@font/poppins_bold"/>
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                        <!-- ── 3rd Place ────────────────────────── -->
+                        <LinearLayout
+                            android:id="@+id/layoutPodium3"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:layout_marginStart="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="🥉"
+                                android:textSize="24sp"
+                                android:layout_marginBottom="6dp"/>
+
+                            <TextView
+                                android:id="@+id/tvAvatar3"
+                                android:layout_width="52dp"
+                                android:layout_height="52dp"
+                                android:layout_gravity="center"
+                                android:text="?"
+                                android:textColor="@color/white"
+                                android:textSize="20sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:background="@drawable/bg_avatar_bronze"
+                                android:fontFamily="@font/poppins_bold"/>
+
+                            <TextView
+                                android:id="@+id/tvName3"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="—"
+                                android:textColor="@color/white"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/poppins_semibold"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:ellipsize="end"
+                                android:layout_marginTop="6dp"/>
+
+                            <TextView
+                                android:id="@+id/tvXp3"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="0 XP"
+                                android:textColor="@color/brand_blue_light"
+                                android:textSize="11sp"
+                                android:fontFamily="@font/poppins_regular"/>
+
+                            <!-- Podium block (shortest) -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="44dp"
+                                android:background="@drawable/bg_podium_bronze"
+                                android:gravity="center"
+                                android:layout_marginTop="8dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="3"
+                                    android:textColor="@color/white"
+                                    android:textSize="18sp"
+                                    android:fontFamily="@font/poppins_bold"/>
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- ════════════════════════════════════════════════ -->
+                <!--  YOUR RANK CARD — always visible                -->
+                <!-- ════════════════════════════════════════════════ -->
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cardYourRank"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="-16dp"
+                    android:layout_marginBottom="16dp"
+                    app:cardCornerRadius="14dp"
+                    app:cardElevation="8dp"
+                    app:cardBackgroundColor="@color/surface">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="14dp">
+
+                        <!-- Rank number -->
+                        <TextView
+                            android:id="@+id/tvYourRankNumber"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:text="#—"
+                            android:textColor="@color/brand_navy"
+                            android:textSize="14sp"
+                            android:fontFamily="@font/poppins_bold"
+                            android:gravity="center"
+                            android:background="@drawable/bg_rank_badge"
+                            android:layout_marginEnd="12dp"/>
+
+                        <!-- Avatar -->
+                        <TextView
+                            android:id="@+id/tvYourAvatar"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:text="?"
+                            android:textColor="@color/white"
+                            android:textSize="16sp"
+                            android:fontFamily="@font/poppins_bold"
+                            android:gravity="center"
+                            android:background="@drawable/bg_avatar_circle"
+                            android:layout_marginEnd="10dp"/>
+
+                        <!-- Name + XP -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:id="@+id/tvYourName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="You"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="14sp"
+                                    android:fontFamily="@font/poppins_semibold"/>
+
+                                <!-- "You" badge -->
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text=" · You"
+                                    android:textColor="@color/brand_blue"
+                                    android:textSize="12sp"
+                                    android:fontFamily="@font/poppins_medium"/>
+
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/tvYourXp"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0 XP"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/poppins_regular"/>
+
+                        </LinearLayout>
+
+                        <!-- Level badge -->
+                        <TextView
+                            android:id="@+id/tvYourLevel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Lv.1"
+                            android:textColor="@color/white"
+                            android:textSize="11sp"
+                            android:fontFamily="@font/poppins_semibold"
+                            android:background="@drawable/bg_level_badge"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="3dp"/>
+
+                    </LinearLayout>
+
+                </androidx.cardview.widget.CardView>
+
+                <!-- ════════════════════════════════════════════════ -->
+                <!--  FULL RANKED LIST                               -->
+                <!-- ════════════════════════════════════════════════ -->
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="All Rankings"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:fontFamily="@font/poppins_bold"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginBottom="10dp"/>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvLeaderboard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingBottom="24dp"
+                    android:nestedScrollingEnabled="false"
+                    android:overScrollMode="never"/>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

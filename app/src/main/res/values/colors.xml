@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ── Brand Colors ─────────────────────────────────────────── -->
+    <color name="brand_navy">#0D1B2A</color>        <!-- Deep navy — primary dark -->
+    <color name="brand_blue">#1A6EBF</color>         <!-- Medium blue — interactive -->
+    <color name="brand_blue_light">#5BA4E5</color>   <!-- Light blue — accents, links -->
+
+    <!-- ── Gamification Colors ──────────────────────────────────── -->
+    <color name="xp_gold">#F5A623</color>            <!-- XP points & level badges -->
+    <color name="streak_orange">#FF6B35</color>      <!-- Streak fire icon -->
+    <color name="guardian_green">#27AE60</color>     <!-- Safe / success state -->
+
+    <!-- ── Safety Rating Colors ─────────────────────────────────── -->
+    <color name="rating_safe">#27AE60</color>        <!-- Green — safe URL/number -->
+    <color name="rating_suspicious">#F39C12</color>  <!-- Amber — suspicious -->
+    <color name="rating_malicious">#E74C3C</color>   <!-- Red — malicious/dangerous -->
+
+    <!-- ── Backgrounds ──────────────────────────────────────────── -->
+    <color name="background">#F5F7FA</color>         <!-- Light grey app background -->
+    <color name="surface">#FFFFFF</color>             <!-- Card/sheet background -->
+    <color name="surface_variant">#EEF2F7</color>    <!-- Secondary card background -->
+
+    <!-- ── Text Colors ──────────────────────────────────────────── -->
+    <color name="text_primary">#0D1B2A</color>       <!-- Main body text -->
+    <color name="text_secondary">#6B7280</color>     <!-- Subtitles, hints -->
+    <color name="text_disabled">#B0B7C3</color>      <!-- Disabled state -->
+
+    <!-- ── Utility ──────────────────────────────────────────────── -->
+    <color name="error_red">#E74C3C</color>
+    <color name="error_red_tint">#E74C3C</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="divider">#E5E7EB</color>
+
+    <!-- Highlighted row background for current user in leaderboard -->
+    <color name="highlight_row">#E8F0FE</color>
+</resources>

@@ -1,0 +1,39 @@
+<resources>
+
+    <!-- Toolbar title: white, Poppins SemiBold, 18sp -->
+    <style name="ToolbarTitleStyle" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:fontFamily">@font/poppins_semibold</item>
+    </style>
+
+    <!-- Card style: white background, rounded corners, subtle shadow -->
+    <style name="AppCard" parent="Widget.MaterialComponents.CardView">
+        <item name="cardCornerRadius">12dp</item>
+        <item name="cardElevation">2dp</item>
+        <item name="cardBackgroundColor">@color/surface</item>
+    </style>
+
+    <!-- Primary button: navy background, white text, rounded -->
+    <style name="AppButton.Primary" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/brand_navy</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="android:fontFamily">@font/poppins_semibold</item>
+    </style>
+
+    <!-- Success button: green background -->
+    <style name="AppButton.Success" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/guardian_green</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="android:fontFamily">@font/poppins_semibold</item>
+    </style>
+    <!-- Tab text style for GuardianFragment TabLayout -->
+    <style name="TabTextStyle" parent="TextAppearance.AppCompat.Small">
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">@font/poppins_semibold</item>
+    </style>
+
+</resources>
+ 

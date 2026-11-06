@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/academyFragment"
+        android:icon="@drawable/ic_academy"
+        android:title="Academy" />
+
+    <item
+        android:id="@+id/guardianFragment"
+        android:icon="@drawable/ic_shield"
+        android:title="Guardian" />
+
+    <item
+        android:id="@+id/communityFragment"
+        android:icon="@drawable/ic_map"
+        android:title="Community" />
+
+    <item
+        android:id="@+id/profileFragment"
+        android:icon="@drawable/ic_person"
+        android:title="Profile" />
+
+</menu>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/admin_nav_graph"
+    app:startDestination="@id/dashboardFragment">
+
+    <fragment
+        android:id="@+id/dashboardFragment"
+        android:name="com.awareness.app.ui.admin.DashboardFragment"
+        android:label="Dashboard"/>
+
+    <fragment
+        android:id="@+id/cmsFragment"
+        android:name="com.awareness.app.ui.admin.CmsFragment"
+        android:label="Content"/>
+
+    <fragment
+        android:id="@+id/userManagementFragment"
+        android:name="com.awareness.app.ui.admin.UserManagementFragment"
+        android:label="Users"/>
+
+    <fragment
+        android:id="@+id/apiHealthFragment"
+        android:name="com.awareness.app.ui.admin.ApiHealthFragment"
+        android:label="API Health"/>
+
+</navigation>

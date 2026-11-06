@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Color when the tab IS selected (active) -->
+    <item
+        android:color="@color/brand_navy"
+        android:state_checked="true" />
+
+    <!-- Color when the tab is NOT selected (inactive) -->
+    <item
+        android:color="@color/text_secondary" />
+
+</selector>

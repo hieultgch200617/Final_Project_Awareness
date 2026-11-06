@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ── Permissions ─────────────────────────────────────────── -->
+
+    <!-- Internet access — required for Firebase and all APIs -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Check if the device has an internet connection -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Push notifications (Daily Quiz) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+
+    <application
+        android:name=".AwarenessApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Awareness"
+        android:usesCleartextTraffic="false">
+
+        <!-- ── Screens (Activities) ────────────────────────────── -->
+
+        <!-- SplashActivity: The first screen shown (decides login vs home) -->
+        <activity
+            android:name=".ui.auth.SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Awareness.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- LoginActivity -->
+        <activity
+            android:name=".ui.auth.LoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- RegisterActivity -->
+        <activity
+            android:name=".ui.auth.RegisterActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- MainActivity: The main shell with bottom navigation -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="false" />
+
+        <!-- AdminActivity: The Command Center shell (admin only) -->
+        <activity
+            android:name=".ui.admin.AdminActivity"
+            android:exported="false" />
+
+        <!-- ── Firebase Cloud Messaging Service ─────────────────── -->
+        <!-- Handles incoming push notifications (Daily Quiz) -->
+        <service
+            android:name=".service.AwarenessMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- ── Google Maps API Key ──────────────────────────────── -->
+        <!-- Key comes from local.properties (MAPS_API_KEY=...) via manifestPlaceholders.
+             Restrict it in Google Cloud Console to this app's package + SHA-1. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
+
+    </application>
+
+</manifest>
