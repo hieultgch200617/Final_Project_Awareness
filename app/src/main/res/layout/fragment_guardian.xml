@@ -291,7 +291,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Check if a phone number is a VoIP line, has a fraud history, or belongs to a known carrier. Powered by Telesign."
+                            android:text="Check if a phone number is a VoIP line, has a fraud history, or belongs to a known carrier. Powered by IPQualityScore."
                             android:textColor="@color/text_secondary"
                             android:textSize="13sp"
                             android:fontFamily="@font/poppins_regular"/>

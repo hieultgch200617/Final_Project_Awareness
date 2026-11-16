@@ -19,7 +19,7 @@ import androidx.fragment.app.Fragment;
 
 import com.awareness.app.R;
 import com.awareness.app.databinding.FragmentGuardianBinding;
-import com.awareness.app.network.TelesignResponse;
+import com.awareness.app.network.PhoneCheckResponse;
 import com.awareness.app.repository.GuardianRepository;
 import com.awareness.app.utils.Constants;
 import com.google.android.material.tabs.TabLayout;
@@ -28,7 +28,7 @@ import com.google.android.material.tabs.TabLayout;
  * Guardian Tools tab (the nav graph already points at com.awareness.app.ui.guardian.GuardianFragment).
  *
  *  Tab 0  URL Scanner    -> Google Safe Browsing  (GuardianRepository.scanUrl)
- *  Tab 1  Phone Checker  -> Telesign via Cloud Function (GuardianRepository.checkPhone)
+ *  Tab 1  Phone Checker  -> IPQualityScore (GuardianRepository.checkPhone)
  *
  * All view ids come from res/layout/fragment_guardian.xml.
  */
@@ -205,7 +205,7 @@ public class GuardianFragment extends Fragment {
 
         repository.checkPhone(input, new GuardianRepository.PhoneCheckCallback() {
             @Override
-            public void onResult(TelesignResponse response) {
+            public void onResult(PhoneCheckResponse response) {
                 if (binding == null) return;
                 setPhoneLoading(false);
                 showPhoneResult(response);
@@ -226,36 +226,44 @@ public class GuardianFragment extends Fragment {
         binding.btnCheckPhone.setEnabled(!loading);
     }
 
-    private void showPhoneResult(TelesignResponse r) {
+    private void showPhoneResult(PhoneCheckResponse r) {
         String rating = r.getAppRating();   // SAFE / SUSPICIOUS / MALICIOUS / UNKNOWN
         int color = ratingColor(rating);
 
         binding.imgPhoneRatingIcon.setImageResource(ratingIcon(rating));
         ImageViewCompat.setImageTintList(binding.imgPhoneRatingIcon, ColorStateList.valueOf(color));
 
-        binding.tvPhoneRatingLabel.setText("UNKNOWN".equals(rating) ? "NO RISK DATA" : rating);
+        String label = rating;
+        if (PhoneCheckResponse.RATING_UNKNOWN.equals(rating)) {
+            label = r.isInvalidNumber() ? "NOT RECOGNISED" : "NO RISK DATA";
+        }
+        binding.tvPhoneRatingLabel.setText(label);
         binding.tvPhoneRatingLabel.setTextColor(color);
 
-        // Risk comes from Telesign's Score product. If it isn't enabled on the account the
-        // Cloud Function returns risk = null and we say so instead of showing a fake 0.
-        binding.tvPhoneRiskScore.setText(r.getRisk() != null
-                ? "Risk Score: " + r.getRiskScore() + " / 1000"
-                : "Risk score not available");
+        // IPQualityScore's fraud score runs 0-100 (higher = riskier)
+        binding.tvPhoneRiskScore.setText(r.hasRiskScore()
+                ? "Fraud score: " + r.getRiskScore() + " / 100"
+                : "Fraud score not available");
 
         binding.tvCarrier.setText(r.getCarrierName());
         binding.tvLineType.setText(r.getPhoneTypeDescription());
         binding.tvVoipStatus.setText(r.isVoip() ? "Yes — internet (VoIP) number" : "No");
         binding.tvCountryCode.setText(r.getCountryCode().isEmpty() ? "—" : r.getCountryCode());
 
-        binding.tvPhoneAdvice.setText(phoneAdvice(rating, r.isVoip()));
+        binding.tvPhoneAdvice.setText(phoneAdvice(r));
 
         binding.cardPhoneResult.setVisibility(View.VISIBLE);
         binding.cardPhoneAdvice.setVisibility(View.VISIBLE);
     }
 
-    private String phoneAdvice(String rating, boolean voip) {
+    private String phoneAdvice(PhoneCheckResponse r) {
+        if (r.isInvalidNumber()) {
+            return "We couldn't validate this number: it may be mistyped, disconnected, or faked "
+                    + "(spoofed). Never trust a caller just because of the number on your screen.";
+        }
+
         String base;
-        switch (rating) {
+        switch (r.getAppRating()) {
             case Constants.RATING_MALICIOUS:
                 base = "This number is considered high risk. Don't share OTP codes, bank details "
                         + "or personal info, and don't call back. Hang up and block it.";
@@ -272,8 +280,18 @@ public class GuardianFragment extends Fragment {
                 base = "We couldn't get a risk score for this number, so treat it with normal "
                         + "caution. Never share OTP codes or passwords with a caller.";
         }
-        if (voip) {
-            base += " Note: VoIP numbers are cheap to create and often used to hide a caller's identity.";
+
+        // Spell out which warning signs IPQS found, so the result isn't a black box
+        java.util.List<String> signals = new java.util.ArrayList<>();
+        if (r.hasRecentAbuse())  signals.add("it has been linked to recent fraud or abuse");
+        if (r.isSpammer())       signals.add("it is flagged as a spammer");
+        if (r.isRisky())         signals.add("it is flagged as risky");
+        if (r.isDisconnected())  signals.add("it isn't an active line, so a call from it may be spoofed");
+        if (r.isPrepaid())       signals.add("it is a prepaid line, which is cheap to replace");
+        if (r.isVoip())          signals.add("it is an internet (VoIP) number, often used to hide a caller's identity");
+
+        if (!signals.isEmpty()) {
+            base += " Warning signs: " + android.text.TextUtils.join("; ", signals) + ".";
         }
         return base;
     }

@@ -21,4 +21,10 @@
         android:icon="@drawable/ic_monitor"
         android:title="API Health"/>
 
+    <!-- Not a screen: AdminActivity intercepts this tap and shows a "Log out?" dialog -->
+    <item
+        android:id="@+id/logoutAction"
+        android:icon="@drawable/ic_logout"
+        android:title="Log out"/>
+
 </menu>

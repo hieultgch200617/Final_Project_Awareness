@@ -156,6 +156,132 @@
                         android:lineSpacingMultiplier="1.6"
                         android:fontFamily="@font/poppins_regular"/>
 
+                    <!-- ══ TRUE / FALSE question (shown only for type="true_false") ══ -->
+                    <LinearLayout
+                        android:id="@+id/layoutTrueFalse"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="True or false?"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp"
+                            android:fontFamily="@font/poppins_semibold"
+                            android:layout_marginBottom="8dp"/>
+
+                        <androidx.cardview.widget.CardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            app:cardCornerRadius="16dp"
+                            app:cardElevation="2dp"
+                            app:cardBackgroundColor="@color/surface">
+
+                            <TextView
+                                android:id="@+id/tvStatement"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:padding="20dp"
+                                android:textColor="@color/text_primary"
+                                android:textSize="18sp"
+                                android:lineSpacingMultiplier="1.3"
+                                android:fontFamily="@font/poppins_semibold"/>
+
+                        </androidx.cardview.widget.CardView>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnTrue"
+                                style="@style/Widget.MaterialComponents.Button"
+                                android:layout_width="0dp"
+                                android:layout_height="60dp"
+                                android:layout_weight="1"
+                                android:layout_marginEnd="6dp"
+                                android:text="✅  True"
+                                android:textAllCaps="false"
+                                android:textColor="@color/text_primary"
+                                android:textSize="16sp"
+                                android:fontFamily="@font/poppins_semibold"
+                                app:backgroundTint="@color/surface_variant"
+                                app:cornerRadius="12dp"/>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnFalse"
+                                style="@style/Widget.MaterialComponents.Button"
+                                android:layout_width="0dp"
+                                android:layout_height="60dp"
+                                android:layout_weight="1"
+                                android:layout_marginStart="6dp"
+                                android:text="❌  False"
+                                android:textAllCaps="false"
+                                android:textColor="@color/text_primary"
+                                android:textSize="16sp"
+                                android:fontFamily="@font/poppins_semibold"
+                                app:backgroundTint="@color/surface_variant"
+                                app:cornerRadius="12dp"/>
+
+                        </LinearLayout>
+
+                        <androidx.cardview.widget.CardView
+                            android:id="@+id/cardFeedback"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:visibility="gone"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="0dp"
+                            app:cardBackgroundColor="@color/surface_variant">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:id="@+id/tvFeedbackTitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="16sp"
+                                    android:fontFamily="@font/poppins_bold"/>
+
+                                <TextView
+                                    android:id="@+id/tvFeedbackBody"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="14sp"
+                                    android:lineSpacingMultiplier="1.4"
+                                    android:fontFamily="@font/poppins_regular"/>
+
+                            </LinearLayout>
+
+                        </androidx.cardview.widget.CardView>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnTryAgain"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:layout_marginTop="12dp"
+                            android:text="Try again"
+                            android:textAllCaps="false"
+                            android:textColor="@color/brand_navy"
+                            android:fontFamily="@font/poppins_semibold"
+                            app:cornerRadius="12dp"
+                            android:visibility="gone"/>
+
+                    </LinearLayout>
+
                     <!-- Key Takeaway Box -->
                     <androidx.cardview.widget.CardView
                         android:id="@+id/cardTakeaway"

@@ -4,6 +4,8 @@ import android.app.Application;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 
+import androidx.appcompat.app.AppCompatDelegate;
+
 import com.awareness.app.utils.Constants;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -15,6 +17,9 @@ public class AwarenessApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // The app's colours are designed for a light UI only (see Theme.Awareness)
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
 
         FirebaseApp.initializeApp(this);
         createNotificationChannel();

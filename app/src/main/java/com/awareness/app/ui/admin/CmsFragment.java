@@ -13,6 +13,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.awareness.app.R;
 import com.awareness.app.adapter.CmsLessonAdapter;
 import com.awareness.app.databinding.DialogLessonEditBinding;
 import com.awareness.app.databinding.FragmentCmsBinding;
@@ -31,6 +32,9 @@ import java.util.Map;
 
 /**
  * Admin → Content tab: create, edit, publish/unpublish and delete lessons.
+ *
+ * Every NEW lesson is a TRUE/FALSE question (statement + correct answer + explanation).
+ * Older text / image / video lessons keep their original form when edited.
  *
  * Media is entered as an https URL (e.g. a Firebase Storage download link). Uploading files
  * from the app is a possible next step.
@@ -143,6 +147,12 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
     private void showEditor(@Nullable Lesson editing) {
         DialogLessonEditBinding d = DialogLessonEditBinding.inflate(getLayoutInflater());
 
+        // Every NEW lesson is a true/false question. Older text/image/video lessons keep their
+        // original form when edited, so nothing already in Firestore breaks.
+        final boolean trueFalse = editing == null || Lesson.TYPE_TRUE_FALSE.equals(editing.getType());
+        d.groupTrueFalse.setVisibility(trueFalse ? View.VISIBLE : View.GONE);
+        d.groupLegacy.setVisibility(trueFalse ? View.GONE : View.VISIBLE);
+
         d.actvCategory.setAdapter(new ArrayAdapter<>(
                 requireContext(), android.R.layout.simple_dropdown_item_1line, CATEGORIES));
         d.actvType.setAdapter(new ArrayAdapter<>(
@@ -151,16 +161,25 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         if (editing != null) {
             d.etTitle.setText(editing.getTitle());
             d.actvCategory.setText(editing.getCategory(), false);
-            d.actvType.setText(editing.getType(), false);
-            d.etContent.setText(editing.getContent());
-            d.etMediaUrl.setText(editing.getMediaUrl());
-            d.etThumbUrl.setText(editing.getThumbnailUrl());
             d.etXp.setText(String.valueOf(editing.getXpReward()));
             d.etOrder.setText(String.valueOf(editing.getOrderIndex()));
             d.switchPublished.setChecked(editing.isPublished());
+
+            if (trueFalse) {
+                d.etStatement.setText(editing.getContent());
+                d.etExplanation.setText(editing.getExplanation());
+                if (editing.getCorrectAnswer() != null) {
+                    d.toggleAnswer.check(editing.getCorrectAnswer()
+                            ? R.id.btnAnswerTrue : R.id.btnAnswerFalse);
+                }
+            } else {
+                d.actvType.setText(editing.getType(), false);
+                d.etContent.setText(editing.getContent());
+                d.etMediaUrl.setText(editing.getMediaUrl());
+                d.etThumbUrl.setText(editing.getThumbnailUrl());
+            }
         } else {
             d.actvCategory.setText(CATEGORIES[0], false);
-            d.actvType.setText(Constants.LESSON_TYPE_TEXT, false);
             d.etXp.setText(String.valueOf(Constants.XP_PER_LESSON));
             d.etOrder.setText(String.valueOf(nextOrderIndex()));
             d.switchPublished.setChecked(false);   // new lessons start as drafts
@@ -170,7 +189,8 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         d.actvType.setOnItemClickListener((parent, v, position, id) -> updateMediaFieldVisibility(d));
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
-                .setTitle(editing == null ? "New lesson" : "Edit lesson")
+                .setTitle(editing == null ? "New true/false question"
+                        : trueFalse ? "Edit question" : "Edit lesson")
                 .setView(d.getRoot())
                 .setPositiveButton("Save", null)      // real handler below, so we can keep it open on errors
                 .setNegativeButton("Cancel", null)
@@ -178,7 +198,7 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         dialog.show();
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-                .setOnClickListener(v -> validateAndSave(d, editing, dialog));
+                .setOnClickListener(v -> validateAndSave(d, editing, dialog, trueFalse));
     }
 
     private void updateMediaFieldVisibility(DialogLessonEditBinding d) {
@@ -186,10 +206,14 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         d.tilMediaUrl.setVisibility(needsMedia ? View.VISIBLE : View.GONE);
     }
 
-    private void validateAndSave(DialogLessonEditBinding d, @Nullable Lesson editing, AlertDialog dialog) {
+    private void validateAndSave(DialogLessonEditBinding d, @Nullable Lesson editing,
+                                 AlertDialog dialog, boolean trueFalse) {
         // Clear old errors
         d.tilTitle.setError(null);
         d.tilCategory.setError(null);
+        d.tilStatement.setError(null);
+        d.tvAnswerError.setVisibility(View.GONE);
+        d.tilExplanation.setError(null);
         d.tilType.setError(null);
         d.tilContent.setError(null);
         d.tilMediaUrl.setError(null);
@@ -197,15 +221,10 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         d.tilXp.setError(null);
         d.tilOrder.setError(null);
 
-        String title     = textOf(d.etTitle);
-        String category  = textOf(d.actvCategory);
-        String type      = textOf(d.actvType);
-        String content   = textOf(d.etContent);
-        String mediaUrl  = textOf(d.etMediaUrl);
-        String thumbUrl  = textOf(d.etThumbUrl);
-        Integer xp       = parseInt(textOf(d.etXp));
-        Integer order    = parseInt(textOf(d.etOrder));
-        boolean needsMedia = !Constants.LESSON_TYPE_TEXT.equals(type);
+        String title    = textOf(d.etTitle);
+        String category = textOf(d.actvCategory);
+        Integer xp      = parseInt(textOf(d.etXp));
+        Integer order   = parseInt(textOf(d.etOrder));
 
         boolean ok = true;
         if (title.length() < 3 || title.length() > 100) {
@@ -214,18 +233,6 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         if (!contains(CATEGORIES, category)) {
             d.tilCategory.setError("Pick a category"); ok = false;
         }
-        if (!contains(TYPES, type)) {
-            d.tilType.setError("Pick a type"); ok = false;
-        }
-        if (content.length() < 20 || content.length() > 20000) {
-            d.tilContent.setError("20–20,000 characters"); ok = false;
-        }
-        if (needsMedia && !isHttps(mediaUrl)) {
-            d.tilMediaUrl.setError("Enter a full https:// link"); ok = false;
-        }
-        if (!thumbUrl.isEmpty() && !isHttps(thumbUrl)) {
-            d.tilThumbUrl.setError("Must start with https://"); ok = false;
-        }
         // Max 50: firestore.rules lets a user gain at most 100 XP per write
         if (xp == null || xp < 5 || xp > 50) {
             d.tilXp.setError("5–50"); ok = false;
@@ -233,16 +240,62 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         if (order == null || order < 0) {
             d.tilOrder.setError("0 or higher"); ok = false;
         }
-        if (!ok) return;
 
         // Keys match the Lesson model / existing queries ("published", "orderIndex", …)
         Map<String, Object> data = new HashMap<>();
+
+        if (trueFalse) {
+            String statement   = textOf(d.etStatement);
+            String explanation = textOf(d.etExplanation);
+            int checked        = d.toggleAnswer.getCheckedButtonId();
+
+            if (statement.length() < 10 || statement.length() > 500) {
+                d.tilStatement.setError("10–500 characters"); ok = false;
+            }
+            if (checked != R.id.btnAnswerTrue && checked != R.id.btnAnswerFalse) {
+                d.tvAnswerError.setVisibility(View.VISIBLE); ok = false;
+            }
+            if (explanation.length() < 10 || explanation.length() > 1000) {
+                d.tilExplanation.setError("10–1,000 characters"); ok = false;
+            }
+            if (!ok) return;
+
+            data.put("type", Lesson.TYPE_TRUE_FALSE);
+            data.put("content", statement);                 // the statement the learner judges
+            data.put("explanation", explanation);
+            data.put("correctAnswer", checked == R.id.btnAnswerTrue);
+            data.put("mediaUrl", null);
+            data.put("thumbnailUrl", null);
+        } else {
+            // Older lessons: unchanged text / image / video form
+            String type      = textOf(d.actvType);
+            String content   = textOf(d.etContent);
+            String mediaUrl  = textOf(d.etMediaUrl);
+            String thumbUrl  = textOf(d.etThumbUrl);
+            boolean needsMedia = !Constants.LESSON_TYPE_TEXT.equals(type);
+
+            if (!contains(TYPES, type)) {
+                d.tilType.setError("Pick a type"); ok = false;
+            }
+            if (content.length() < 20 || content.length() > 20000) {
+                d.tilContent.setError("20–20,000 characters"); ok = false;
+            }
+            if (needsMedia && !isHttps(mediaUrl)) {
+                d.tilMediaUrl.setError("Enter a full https:// link"); ok = false;
+            }
+            if (!thumbUrl.isEmpty() && !isHttps(thumbUrl)) {
+                d.tilThumbUrl.setError("Must start with https://"); ok = false;
+            }
+            if (!ok) return;
+
+            data.put("type", type);
+            data.put("content", content);
+            data.put("mediaUrl", needsMedia ? mediaUrl : null);
+            data.put("thumbnailUrl", thumbUrl.isEmpty() ? null : thumbUrl);
+        }
+
         data.put("title", title);
         data.put("category", category);
-        data.put("type", type);
-        data.put("content", content);
-        data.put("mediaUrl", needsMedia ? mediaUrl : null);
-        data.put("thumbnailUrl", thumbUrl.isEmpty() ? null : thumbUrl);
         data.put("xpReward", xp);
         data.put("orderIndex", order);
         data.put("published", d.switchPublished.isChecked());
@@ -260,7 +313,7 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
 
         task.addOnSuccessListener(r -> {
             dialog.dismiss();
-            toast(editing == null ? "Lesson created." : "Lesson saved.");
+            toast(editing == null ? "Question created." : "Saved.");
         }).addOnFailureListener(e -> {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
             toast("Save failed: " + e.getMessage());

@@ -95,7 +95,10 @@ public class LessonAdapter extends RecyclerView.Adapter<LessonAdapter.LessonView
             tvXpReward.setText("⭐ +" + lesson.getXpReward() + " XP");
 
             // Set the type icon based on lesson type
-            switch (lesson.getType()) {
+            switch (lesson.getType() != null ? lesson.getType() : Constants.LESSON_TYPE_TEXT) {
+                case Lesson.TYPE_TRUE_FALSE:
+                    imgType.setImageResource(R.drawable.ic_help_circle);
+                    break;
                 case Constants.LESSON_TYPE_VIDEO:
                     imgType.setImageResource(R.drawable.ic_play_circle);
                     break;
@@ -117,7 +120,8 @@ public class LessonAdapter extends RecyclerView.Adapter<LessonAdapter.LessonView
                         .centerCrop()
                         .into(imgThumbnail);
             } else {
-                imgThumbnail.setImageResource(R.drawable.ic_image);
+                imgThumbnail.setImageResource(Lesson.TYPE_TRUE_FALSE.equals(lesson.getType())
+                        ? R.drawable.ic_help_circle : R.drawable.ic_image);
             }
 
             // Handle card tap → notify the fragment via our listener

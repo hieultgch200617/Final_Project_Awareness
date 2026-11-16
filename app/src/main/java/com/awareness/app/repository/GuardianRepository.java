@@ -1,25 +1,27 @@
 package com.awareness.app.repository;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 
 import com.awareness.app.BuildConfig;
 import com.awareness.app.network.ApiConstants;
+import com.awareness.app.network.IpqsApiService;
+import com.awareness.app.network.PhoneCheckResponse;
 import com.awareness.app.network.SafeBrowsingApiService;
 import com.awareness.app.network.SafeBrowsingRequest;
 import com.awareness.app.network.SafeBrowsingResponse;
-import com.awareness.app.network.TelesignResponse;
 import com.awareness.app.utils.Constants;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.functions.FirebaseFunctions;
-import com.google.firebase.functions.FirebaseFunctionsException;
-import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
 import okhttp3.logging.HttpLoggingInterceptor;
@@ -30,16 +32,17 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 /**
- * CHANGES vs. the original:
- *  1. Telesign is no longer called from the phone. checkPhone() calls the "checkPhone"
- *     Cloud Function, so the Telesign credentials never ship inside the APK.
- *  2. HTTP logging is only enabled in debug builds (BODY logging prints API keys and
- *     auth headers to Logcat).
- *  3. The user id is read when a scan is logged, not once when the singleton is created.
- *     Before, logging out and into another account kept writing the OLD user id (or ""
- *     if the singleton was first created before login).
+ * Guardian tools:
+ *   - URL scanner   -> Google Safe Browsing
+ *   - Phone checker -> IPQualityScore (IPQS) Phone Number Validation API
+ *
+ * The phone checker calls IPQS straight from the app with the key from local.properties
+ * (IPQS_API_KEY). Results are cached per number while the app is running, so re-checking the
+ * same number doesn't use up another lookup from your plan.
  */
 public class GuardianRepository {
+
+    private static final String TAG = "GuardianRepository";
 
     public interface UrlScanCallback {
         void onResult(String rating, String threatType);  // SAFE / SUSPICIOUS / MALICIOUS
@@ -47,7 +50,7 @@ public class GuardianRepository {
     }
 
     public interface PhoneCheckCallback {
-        void onResult(TelesignResponse response);
+        void onResult(PhoneCheckResponse response);
         void onError(String message);
     }
 
@@ -56,21 +59,18 @@ public class GuardianRepository {
         void onResult(boolean ok, int httpCode, long latencyMs, String error);
     }
 
-    public interface BackendHealthCallback {
-        void onResult(Map<String, Object> data);
-        void onError(String message);
-    }
-
     private static GuardianRepository instance;
 
     private final SafeBrowsingApiService safeBrowsingService;
-    private final FirebaseFunctions      functions;
+    private final IpqsApiService         ipqsService;
     private final FirebaseFirestore      db;
-    private final Gson                   gson = new Gson();
+
+    /** number (digits) -> last result. Only touched from the main thread (Retrofit callbacks). */
+    private final Map<String, PhoneCheckResponse> phoneCache = new HashMap<>();
 
     private GuardianRepository() {
         safeBrowsingService = buildSafeBrowsingClient();
-        functions           = FirebaseFunctions.getInstance(ApiConstants.FUNCTIONS_REGION);
+        ipqsService         = buildIpqsClient();
         db                  = FirebaseFirestore.getInstance();
     }
 
@@ -147,73 +147,83 @@ public class GuardianRepository {
                 });
     }
 
-    /** Staff-only: asks the "apiHealth" Cloud Function for backend status. */
-    @SuppressWarnings("unchecked")
-    public void fetchBackendHealth(BackendHealthCallback callback) {
-        functions.getHttpsCallable("apiHealth")
-                .call()
-                .addOnSuccessListener(result -> {
-                    Object data = result.getData();
-                    if (data instanceof Map) {
-                        callback.onResult((Map<String, Object>) data);
-                    } else {
-                        callback.onError("Unexpected response from the health check.");
-                    }
-                })
-                .addOnFailureListener(e -> {
-                    if (e instanceof FirebaseFunctionsException
-                            && ((FirebaseFunctionsException) e).getCode()
-                            == FirebaseFunctionsException.Code.NOT_FOUND) {
-                        callback.onError("Cloud Function not deployed yet (firebase deploy --only functions).");
-                    } else if (e instanceof FirebaseFunctionsException
-                            && ((FirebaseFunctionsException) e).getCode()
-                            == FirebaseFunctionsException.Code.PERMISSION_DENIED) {
-                        callback.onError("Staff access required.");
-                    } else {
-                        callback.onError("Couldn't reach the Cloud Function.");
-                    }
-                });
-    }
-
-    // ── Phone Checker (via Cloud Function) ───────────────────────
+    // ── Phone Checker (IPQualityScore) ───────────────────────────
 
     public void checkPhone(String rawNumber, PhoneCheckCallback callback) {
-        String e164Number = formatToE164(rawNumber);
+        String key = ApiConstants.IPQS_API_KEY;
+        if (key == null || key.trim().isEmpty()) {
+            callback.onError("The phone checker isn't set up yet (IPQS_API_KEY is missing).");
+            return;
+        }
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("phoneNumber", e164Number);
+        String e164   = formatToE164(rawNumber);        // "+84912345678"
+        String digits = e164.substring(1);              // IPQS wants digits incl. country code
 
-        functions.getHttpsCallable("checkPhone")
-                .call(data)
-                .addOnSuccessListener(result -> {
-                    try {
-                        // The function returns JSON in the same shape TelesignResponse expects
-                        TelesignResponse body = gson.fromJson(
-                                gson.toJson(result.getData()), TelesignResponse.class);
+        PhoneCheckResponse cached = phoneCache.get(digits);
+        if (cached != null) {                           // free: doesn't use a lookup credit
+            callback.onResult(cached);
+            return;
+        }
+
+        ipqsService.checkPhone(key.trim(), digits, ApiConstants.IPQS_STRICTNESS)
+                .enqueue(new Callback<PhoneCheckResponse>() {
+
+                    @Override
+                    public void onResponse(@NonNull Call<PhoneCheckResponse> call,
+                                           @NonNull Response<PhoneCheckResponse> response) {
+                        if (!response.isSuccessful()) {
+                            callback.onError(httpErrorMessage(response.code()));
+                            return;
+                        }
+                        PhoneCheckResponse body = response.body();
                         if (body == null) {
                             callback.onError("Empty response from the phone-check service.");
                             return;
                         }
-                        logScanToFirestore("phone", e164Number, body.getAppRating());
+                        if (!body.isSuccess()) {
+                            // IPQS answers HTTP 200 with success=false for bad keys, exhausted
+                            // credits, invalid numbers, etc. The reason is in "message".
+                            if (BuildConfig.DEBUG) Log.w(TAG, "IPQS error: " + body.getMessage());
+                            callback.onError(friendlyIpqsError(body.getMessage()));
+                            return;
+                        }
+
+                        phoneCache.put(digits, body);
+                        logScanToFirestore("phone", e164, body.getAppRating());
                         callback.onResult(body);
-                    } catch (JsonParseException e) {
-                        callback.onError("Unexpected response from the phone-check service.");
                     }
-                })
-                .addOnFailureListener(e -> callback.onError(friendlyFunctionError(e)));
+
+                    @Override
+                    public void onFailure(@NonNull Call<PhoneCheckResponse> call,
+                                          @NonNull Throwable t) {
+                        if (t instanceof JsonParseException) {
+                            callback.onError("Unexpected response from the phone-check service.");
+                        } else {
+                            callback.onError("Network error. Check your connection.");
+                        }
+                    }
+                });
     }
 
-    private String friendlyFunctionError(Exception e) {
-        if (e instanceof FirebaseFunctionsException) {
-            switch (((FirebaseFunctionsException) e).getCode()) {
-                case UNAUTHENTICATED:    return "Please sign in again.";
-                case INVALID_ARGUMENT:   return "That doesn't look like a valid phone number.";
-                case RESOURCE_EXHAUSTED: return "Daily phone-check limit reached. Try again tomorrow.";
-                case UNAVAILABLE:        return "The phone-check service is unavailable right now.";
-                default: break;
-            }
+    private String httpErrorMessage(int code) {
+        if (code == 401 || code == 403) return "The phone-check API key was rejected.";
+        if (code == 429)                return "Too many phone checks right now. Try again in a minute.";
+        return "Phone check failed (error " + code + "). Please try again later.";
+    }
+
+    /** Turns IPQS's technical "message" into something a user can act on. */
+    private String friendlyIpqsError(String message) {
+        String m = message == null ? "" : message.toLowerCase(Locale.US);
+        if (m.contains("credit") || m.contains("quota") || m.contains("exceed") || m.contains("insufficient")) {
+            return "The phone-check quota is used up for now. Please try again later.";
         }
-        return "Network error. Check your connection.";
+        if (m.contains("key")) {
+            return "The phone-check API key was rejected.";
+        }
+        if (m.contains("phone") || m.contains("number") || m.contains("invalid")) {
+            return "That doesn't look like a valid phone number.";
+        }
+        return "The phone-check service returned an error. Please try again later.";
     }
 
     // ── Firestore logging (feeds the admin dashboard) ────────────
@@ -233,7 +243,7 @@ public class GuardianRepository {
         db.collection(Constants.COLLECTION_SCANS).add(log);
     }
 
-    // ── Retrofit client (Safe Browsing only) ─────────────────────
+    // ── Retrofit clients ─────────────────────────────────────────
 
     private SafeBrowsingApiService buildSafeBrowsingClient() {
         // Never log request bodies/URLs (they contain the API key) in release builds
@@ -252,6 +262,22 @@ public class GuardianRepository {
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(SafeBrowsingApiService.class);
+    }
+
+    private IpqsApiService buildIpqsClient() {
+        // Deliberately NO logging interceptor: the IPQS key is part of the URL path,
+        // so logging requests would print the key to Logcat.
+        OkHttpClient client = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .build();
+
+        return new Retrofit.Builder()
+                .baseUrl(ApiConstants.IPQS_BASE_URL)
+                .client(client)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+                .create(IpqsApiService.class);
     }
 
     // ── Input helpers ────────────────────────────────────────────

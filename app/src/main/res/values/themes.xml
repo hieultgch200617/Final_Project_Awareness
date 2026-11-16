@@ -1,7 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Base app theme — all screens inherit this -->
-    <style name="Theme.Awareness" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!-- Base app theme — all screens inherit this.
+         LIGHT-ONLY on purpose: every colour in this app is a fixed light-theme colour, so letting
+         Android switch to the dark theme made default-coloured text light-on-light (invisible). -->
+    <style name="Theme.Awareness" parent="Theme.MaterialComponents.Light.NoActionBar">
 
         <!-- Primary brand color (used by Material components automatically) -->
         <item name="colorPrimary">@color/brand_navy</item>
@@ -19,6 +21,8 @@
 
         <!-- Status bar color -->
         <item name="android:statusBarColor">@color/brand_navy</item>
+        <!-- Navy status bar -> clock/battery icons must be WHITE (false = light icons) -->
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:navigationBarColor">@color/white</item>
 
         <!-- Text field outline color -->

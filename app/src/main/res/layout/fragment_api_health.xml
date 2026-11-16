@@ -77,7 +77,7 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- ── Phone service (Telesign via Cloud Function) ── -->
+            <!-- ── Phone service (IPQualityScore) ── -->
             <androidx.cardview.widget.CardView
                 style="@style/AppCard"
                 android:layout_width="match_parent"
@@ -91,7 +91,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="📞 Phone checker (Telesign via Cloud Function)"
+                        android:text="📞 Phone checker (IPQualityScore)"
                         android:textColor="@color/text_primary"
                         android:textSize="14sp"
                         android:fontFamily="@font/poppins_semibold"/>
@@ -113,7 +113,7 @@
                         android:textSize="12sp"
                         android:fontFamily="@font/poppins_regular"/>
                     <TextView
-                        android:id="@+id/tvTelesignToday"
+                        android:id="@+id/tvPhoneExtra"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
@@ -201,7 +201,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:padding="14dp"
-                    android:text="ℹ️ Neither Google Safe Browsing nor Telesign offers a simple “credits left” call. Check Safe Browsing quotas in Google Cloud Console → APIs &amp; Services → Quotas, and your Telesign balance in the Telesign portal. This screen shows usage so you can spot unusual spikes early."
+                    android:text="ℹ️ This screen can't show remaining credits. Check Safe Browsing quotas in Google Cloud Console → APIs &amp; Services → Quotas, and your remaining IPQualityScore lookups in your IPQS account dashboard. The usage numbers here help you spot unusual spikes early."
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:fontFamily="@font/poppins_regular"/>

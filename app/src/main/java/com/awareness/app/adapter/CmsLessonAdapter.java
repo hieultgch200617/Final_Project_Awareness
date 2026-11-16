@@ -53,6 +53,11 @@ public class CmsLessonAdapter extends RecyclerView.Adapter<CmsLessonAdapter.Less
         return items.size();
     }
 
+    private static String typeLabel(String type) {
+        if (type == null) return "—";
+        return Lesson.TYPE_TRUE_FALSE.equals(type) ? "true / false" : type;
+    }
+
     class LessonViewHolder extends RecyclerView.ViewHolder {
         private final ItemCmsLessonBinding b;
 
@@ -65,7 +70,7 @@ public class CmsLessonAdapter extends RecyclerView.Adapter<CmsLessonAdapter.Less
             b.tvTitle.setText(l.getTitle() != null ? l.getTitle() : "(untitled)");
             b.tvMeta.setText(
                     (l.getCategory() != null ? l.getCategory() : "—")
-                            + "  ·  " + (l.getType() != null ? l.getType() : "—")
+                            + "  ·  " + typeLabel(l.getType())
                             + "  ·  " + l.getXpReward() + " XP"
                             + "  ·  #" + l.getOrderIndex());
             b.tvDraft.setVisibility(l.isPublished() ? View.GONE : View.VISIBLE);

@@ -3,25 +3,30 @@ package com.awareness.app.network;
 import com.awareness.app.BuildConfig;
 
 /**
- * API configuration.
+ * API configuration. No secrets live in source code: both keys are injected at build time
+ * from local.properties (which is git-ignored):
  *
- * No secrets are written in source code any more:
- *  - SAFE_BROWSING_API_KEY is injected at build time from local.properties (which is git-ignored).
- *    Add this line to local.properties:   SAFE_BROWSING_API_KEY=your_key_here
- *    Then restrict the key in Google Cloud Console: API restriction = "Safe Browsing API" only.
- *    Do NOT add an Android-app restriction to this key: this REST call doesn't send the app-identity
- *    headers, so every scan would fail with HTTP 403. Set a quota cap instead.
+ *     SAFE_BROWSING_API_KEY=...
+ *     IPQS_API_KEY=...
  *
- *  - Telesign credentials are NOT in the app at all. Phone checks go through the
- *    "checkPhone" Cloud Function, which holds the credentials as Firebase secrets.
+ * Because these keys ship inside the APK, anyone determined can extract them. Limit the damage:
+ *  - Safe Browsing: restrict the key to "Safe Browsing API" only in Google Cloud Console.
+ *  - IPQualityScore: watch your usage in the IPQS dashboard, and regenerate the key there if
+ *    you ever see unexpected lookups.
  */
 public class ApiConstants {
 
-    // ── Google Safe Browsing ─────────────────────────────────────
+    // ── Google Safe Browsing (URL scanner) ───────────────────────
     public static final String SAFE_BROWSING_BASE_URL = "https://safebrowsing.googleapis.com/";
     public static final String SAFE_BROWSING_API_KEY  = BuildConfig.SAFE_BROWSING_API_KEY;
 
-    // ── Cloud Functions ──────────────────────────────────────────
-    // Must match the region in functions/index.js
-    public static final String FUNCTIONS_REGION = "asia-southeast1";
+    // ── IPQualityScore (phone checker) ───────────────────────────
+    public static final String IPQS_BASE_URL = "https://ipqualityscore.com/";
+    public static final String IPQS_API_KEY  = BuildConfig.IPQS_API_KEY;
+
+    /**
+     * IPQS "strictness" (0-2): higher = stricter fraud scoring but more false positives.
+     * 1 is a balanced middle value; lower it to 0 if too many ordinary numbers look risky.
+     */
+    public static final int IPQS_STRICTNESS = 1;
 }

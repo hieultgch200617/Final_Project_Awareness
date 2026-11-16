@@ -1,6 +1,7 @@
 package com.awareness.app.ui.academy;
 
 import android.app.Dialog;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -12,6 +13,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
@@ -42,6 +44,11 @@ public class LessonDetailFragment extends Fragment {
 
     // The lesson loaded from Firestore
     private Lesson currentLesson;
+
+    // True/false lessons
+    private boolean alreadyCompleted = false;   // XP for this lesson was already claimed
+    private boolean solved           = false;   // the learner has answered correctly
+    private boolean answerLocked     = false;   // an answer is showing; wait for "Try again"
 
     // ── Lifecycle ─────────────────────────────────────────────────
 
@@ -126,17 +133,23 @@ public class LessonDetailFragment extends Fragment {
                 .document(lessonId)
                 .get()
                 .addOnSuccessListener(doc -> {
+                    if (binding == null) return;   // screen was closed before Firestore answered
                     if (doc.exists()) {
+                        alreadyCompleted = true;
                         // Already done — show disabled button
                         binding.btnComplete.setText("✓ Already Completed");
                         binding.btnComplete.setEnabled(false);
                         binding.btnComplete.setAlpha(0.6f);
+                        binding.btnComplete.setVisibility(View.VISIBLE);
                     } else {
+                        alreadyCompleted = false;
                         // Not yet done — show active green button
                         binding.btnComplete.setEnabled(true);
                         binding.btnComplete.setAlpha(1.0f);
+                        // True/false lessons only reveal the button after a correct answer
+                        boolean waitForAnswer = isTrueFalse(currentLesson) && !solved;
+                        binding.btnComplete.setVisibility(waitForAnswer ? View.GONE : View.VISIBLE);
                     }
-                    binding.btnComplete.setVisibility(View.VISIBLE);
                 });
     }
 
@@ -162,7 +175,12 @@ public class LessonDetailFragment extends Fragment {
         binding.layoutContent.setVisibility(View.VISIBLE);
 
         // ── Switch content area based on lesson type ──────────────
-        switch (lesson.getType()) {
+        String type = lesson.getType() != null ? lesson.getType() : Constants.LESSON_TYPE_TEXT;
+        switch (type) {
+
+            case Lesson.TYPE_TRUE_FALSE:
+                renderTrueFalse(lesson);
+                break;
 
             case Constants.LESSON_TYPE_VIDEO:
                 renderVideo(lesson.getMediaUrl());
@@ -221,6 +239,87 @@ public class LessonDetailFragment extends Fragment {
                 .into(binding.imgLesson);
     }
 
+    // ── True / false lessons ──────────────────────────────────────
+
+    private static boolean isTrueFalse(@Nullable Lesson lesson) {
+        return lesson != null && Lesson.TYPE_TRUE_FALSE.equals(lesson.getType());
+    }
+
+    /** Shows the statement and the True / False buttons instead of body text or media. */
+    private void renderTrueFalse(Lesson lesson) {
+        binding.playerView.setVisibility(View.GONE);
+        binding.imgLesson.setVisibility(View.GONE);
+        binding.tvContent.setVisibility(View.GONE);          // the statement has its own card
+        binding.layoutTrueFalse.setVisibility(View.VISIBLE);
+        binding.tvStatement.setText(lesson.getContent());
+
+        solved = false;
+        resetTrueFalseUi();
+        binding.btnTrue.setOnClickListener(v -> onTrueFalseAnswer(true));
+        binding.btnFalse.setOnClickListener(v -> onTrueFalseAnswer(false));
+        binding.btnTryAgain.setOnClickListener(v -> resetTrueFalseUi());
+    }
+
+    private void resetTrueFalseUi() {
+        answerLocked = false;
+        styleAnswerButton(binding.btnTrue,  R.color.surface_variant, R.color.text_primary);
+        styleAnswerButton(binding.btnFalse, R.color.surface_variant, R.color.text_primary);
+        binding.cardFeedback.setVisibility(View.GONE);
+        binding.btnTryAgain.setVisibility(View.GONE);
+    }
+
+    /**
+     * Correct  -> green button, explanation, and the "Claim XP" button appears (it reuses the normal
+     *             completeLesson() flow, so XP, level-up and the reward dialog work as before).
+     * Wrong    -> red button, the explanation (this is a learning app: the point is to understand
+     *             why), and "Try again". No XP penalty.
+     */
+    private void onTrueFalseAnswer(boolean chosen) {
+        if (answerLocked || currentLesson == null || binding == null) return;
+        answerLocked = true;
+
+        boolean correct = chosen == Boolean.TRUE.equals(currentLesson.getCorrectAnswer());
+
+        styleAnswerButton(chosen ? binding.btnTrue : binding.btnFalse,
+                correct ? R.color.guardian_green : R.color.error_red, R.color.white);
+
+        binding.tvFeedbackTitle.setText(correct ? "✅ Correct!" : "❌ Not quite");
+        binding.tvFeedbackTitle.setTextColor(ContextCompat.getColor(requireContext(),
+                correct ? R.color.guardian_green : R.color.error_red));
+
+        String explanation = currentLesson.getExplanation() != null ? currentLesson.getExplanation() : "";
+        if (correct && alreadyCompleted) {
+            explanation += (explanation.isEmpty() ? "" : "\n\n")
+                    + "You've already earned the XP for this lesson.";
+        }
+        binding.tvFeedbackBody.setText(explanation);
+        binding.cardFeedback.setVisibility(View.VISIBLE);
+
+        if (correct) {
+            solved = true;
+            binding.btnTryAgain.setVisibility(View.GONE);
+            if (!alreadyCompleted) {
+                binding.btnComplete.setText("Claim +" + currentLesson.getXpReward() + " XP  ✓");
+                binding.btnComplete.setEnabled(true);
+                binding.btnComplete.setAlpha(1.0f);
+                binding.btnComplete.setVisibility(View.VISIBLE);
+            }
+        } else {
+            binding.btnTryAgain.setVisibility(View.VISIBLE);
+        }
+
+        // Bring the feedback into view
+        binding.scrollView.post(() -> {
+            if (binding != null) binding.scrollView.fullScroll(View.FOCUS_DOWN);
+        });
+    }
+
+    private void styleAnswerButton(MaterialButton button, int backgroundColorRes, int textColorRes) {
+        button.setBackgroundTintList(ColorStateList.valueOf(
+                ContextCompat.getColor(requireContext(), backgroundColorRes)));
+        button.setTextColor(ContextCompat.getColor(requireContext(), textColorRes));
+    }
+
     private void setupCompleteButton(Lesson lesson) {
         binding.btnComplete.setOnClickListener(v -> completeLesson(lesson));
     }
@@ -273,7 +372,9 @@ public class LessonDetailFragment extends Fragment {
         }).addOnFailureListener(e -> {
             // Re-enable on failure so user can retry
             binding.btnComplete.setEnabled(true);
-            binding.btnComplete.setText("Mark as Complete  ✓");
+            binding.btnComplete.setText(isTrueFalse(lesson)
+                    ? "Claim +" + lesson.getXpReward() + " XP  ✓"
+                    : "Mark as Complete  ✓");
         });
     }
 

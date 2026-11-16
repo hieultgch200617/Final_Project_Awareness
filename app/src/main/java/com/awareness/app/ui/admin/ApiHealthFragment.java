@@ -13,6 +13,7 @@ import androidx.fragment.app.Fragment;
 
 import com.awareness.app.R;
 import com.awareness.app.databinding.FragmentApiHealthBinding;
+import com.awareness.app.network.ApiConstants;
 import com.awareness.app.repository.GuardianRepository;
 import com.awareness.app.utils.Constants;
 import com.google.firebase.firestore.AggregateQuery;
@@ -22,15 +23,13 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.text.DateFormat;
 import java.util.Date;
-import java.util.Map;
 
 /**
  * Admin → API Health.
  *
  *  1. Safe Browsing: a real probe (harmless URL) → HTTP status + latency.
- *  2. Phone checker: asks the staff-only "apiHealth" Cloud Function whether the Telesign
- *     secrets are set and how many billable checks happened today. We never make a
- *     paid Telesign call just to "ping".
+ *  2. Phone checker (IPQualityScore): checks that the API key is present in this build. We
+ *     never make a real lookup just to "ping", because every lookup uses plan credits.
  *  3. Usage: server-side count() aggregations on scan_logs (cheap: 1 read per 1000 docs).
  *     Only single-field filters are used, so no composite indexes are needed.
  */
@@ -78,7 +77,7 @@ public class ApiHealthFragment extends Fragment {
         binding.tvSbDetail.setText("");
         setStatus(binding.tvPhoneStatus, "● Checking…", R.color.text_secondary);
         binding.tvPhoneDetail.setText("");
-        binding.tvTelesignToday.setText("");
+        binding.tvPhoneExtra.setText("");
 
         probeSafeBrowsing();
         probeBackend();
@@ -127,42 +126,24 @@ public class ApiHealthFragment extends Fragment {
         });
     }
 
-    // ── 2. Phone checker backend ──────────────────────────────────
+    // ── 2. Phone checker (IPQualityScore) ─────────────────────────
 
     private void probeBackend() {
-        repository.fetchBackendHealth(new GuardianRepository.BackendHealthCallback() {
-            @Override
-            public void onResult(Map<String, Object> data) {
-                if (binding == null) return;
+        boolean configured = ApiConstants.IPQS_API_KEY != null
+                && !ApiConstants.IPQS_API_KEY.trim().isEmpty();
 
-                boolean configured = Boolean.TRUE.equals(data.get("telesignConfigured"));
-                long today = data.get("phoneChecksToday") instanceof Number
-                        ? ((Number) data.get("phoneChecksToday")).longValue() : 0;
-                long perUser = data.get("dailyLimitPerUser") instanceof Number
-                        ? ((Number) data.get("dailyLimitPerUser")).longValue() : 0;
-
-                if (configured) {
-                    setStatus(binding.tvPhoneStatus, "● Ready", R.color.rating_safe);
-                    binding.tvPhoneDetail.setText("Cloud Function is deployed and Telesign credentials "
-                            + "are set. They're only proven valid by a real phone check.");
-                } else {
-                    setStatus(binding.tvPhoneStatus, "● Credentials not set", R.color.rating_malicious);
-                    binding.tvPhoneDetail.setText("Run: firebase functions:secrets:set TELESIGN_CUSTOMER_ID "
-                            + "and TELESIGN_API_KEY, then redeploy.");
-                }
-                binding.tvTelesignToday.setText("Billable phone checks today: " + today
-                        + "  (limit " + perUser + " per user per day)");
-                probeFinished();
-            }
-
-            @Override
-            public void onError(String message) {
-                if (binding == null) return;
-                setStatus(binding.tvPhoneStatus, "● Unavailable", R.color.rating_malicious);
-                binding.tvPhoneDetail.setText(message);
-                probeFinished();
-            }
-        });
+        if (configured) {
+            setStatus(binding.tvPhoneStatus, "● API key configured", R.color.rating_safe);
+            binding.tvPhoneDetail.setText("Every new phone lookup uses credits from your IPQualityScore "
+                    + "plan. Check what's left in your IPQS dashboard.");
+        } else {
+            setStatus(binding.tvPhoneStatus, "● API key missing", R.color.rating_malicious);
+            binding.tvPhoneDetail.setText("Add IPQS_API_KEY=... to local.properties, then sync Gradle "
+                    + "and rebuild the app.");
+        }
+        binding.tvPhoneExtra.setText("Results are remembered per number while the app is open, so "
+                + "re-checking the same number doesn't use another lookup.");
+        probeFinished();
     }
 
     // ── 3. Usage counters ─────────────────────────────────────────

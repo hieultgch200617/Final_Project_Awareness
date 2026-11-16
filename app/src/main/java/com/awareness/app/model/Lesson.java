@@ -6,6 +6,9 @@ import java.util.Date;
 
 public class Lesson {
 
+    /** type value for true/false question lessons (older lessons use text / image / video). */
+    public static final String TYPE_TRUE_FALSE = "true_false";
+
     @DocumentId
     private String lessonId;
 
@@ -18,6 +21,11 @@ public class Lesson {
     private int    xpReward;        // XP earned on completion (default: 10)
     private int    orderIndex;      // Controls the order lessons appear in the list
     private boolean isPublished;    // Admin can toggle this — unpublished lessons are hidden
+
+    // ── True/false lessons only (null on older lessons) ──────────
+    // For type == "true_false": `content` holds the STATEMENT the learner judges.
+    private Boolean correctAnswer;  // true = the statement is true
+    private String  explanation;    // shown after the learner answers
 
     @ServerTimestamp
     private Date createdAt;
@@ -56,6 +64,12 @@ public class Lesson {
 
     public boolean isPublished()                   { return isPublished; }
     public void    setPublished(boolean published) { isPublished = published; }
+
+    public Boolean getCorrectAnswer()                      { return correctAnswer; }
+    public void    setCorrectAnswer(Boolean correctAnswer) { this.correctAnswer = correctAnswer; }
+
+    public String getExplanation()                         { return explanation; }
+    public void   setExplanation(String explanation)       { this.explanation = explanation; }
 
     public Date getCreatedAt()                     { return createdAt; }
     public void setCreatedAt(Date createdAt)       { this.createdAt = createdAt; }
