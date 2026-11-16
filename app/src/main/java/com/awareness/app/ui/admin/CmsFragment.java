@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -15,16 +16,23 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.awareness.app.R;
 import com.awareness.app.adapter.CmsLessonAdapter;
+import com.awareness.app.adapter.CmsQuizAdapter;
 import com.awareness.app.databinding.DialogLessonEditBinding;
+import com.awareness.app.databinding.DialogQuizEditBinding;
 import com.awareness.app.databinding.FragmentCmsBinding;
 import com.awareness.app.model.Lesson;
+import com.awareness.app.model.QuizQuestion;
 import com.awareness.app.utils.Constants;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.textfield.TextInputLayout;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,6 +43,9 @@ import java.util.Map;
  *
  * Every NEW lesson is a TRUE/FALSE question (statement + correct answer + explanation).
  * Older text / image / video lessons keep their original form when edited.
+ *
+ * The second tab, "Daily Quiz", manages the multiple-choice questions in the Firestore
+ * "quizzes" collection that QuizFragment draws from (3 published questions per day).
  *
  * Media is entered as an https URL (e.g. a Firebase Storage download link). Uploading files
  * from the app is a possible next step.
@@ -54,8 +65,23 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
     private FragmentCmsBinding binding;
     private FirebaseFirestore db;
     private CmsLessonAdapter adapter;
+    private static final String[] QUIZ_CATEGORIES = {
+            "None", Constants.CATEGORY_PHISHING, Constants.CATEGORY_VOIP, Constants.CATEGORY_DEEPFAKE,
+            Constants.CATEGORY_ROMANCE, Constants.CATEGORY_INVESTMENT
+    };
+    /** QuizFragment picks this many questions per day; with fewer published it uses its built-in bank. */
+    private static final int QUIZ_MIN_POOL = 3;
+
     private ListenerRegistration registration;
+    private ListenerRegistration quizRegistration;
+    private CmsQuizAdapter quizAdapter;
     private List<Lesson> current = new ArrayList<>();
+    private List<QuizQuestion> quizzes = new ArrayList<>();
+    private boolean showingQuizzes = false;
+    private boolean lessonsLoaded = false;
+    private boolean quizzesLoaded = false;
+    private String lessonsError = null;
+    private String quizzesError = null;
 
     @Nullable
     @Override
@@ -72,21 +98,91 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
         super.onViewCreated(view, savedInstanceState);
 
         adapter = new CmsLessonAdapter(this);
+        quizAdapter = new CmsQuizAdapter(new CmsQuizAdapter.Listener() {
+            @Override public void onEdit(QuizQuestion q)   { showQuizEditor(q); }
+            @Override public void onDelete(QuizQuestion q) { confirmDeleteQuiz(q); }
+            @Override public void onTogglePublished(QuizQuestion q, boolean published) {
+                setQuizPublished(q, published);
+            }
+        });
+
         binding.rvLessons.setLayoutManager(new LinearLayoutManager(requireContext()));
         binding.rvLessons.setAdapter(adapter);
-        binding.fabAdd.setOnClickListener(v -> showEditor(null));
+
+        binding.fabAdd.setOnClickListener(v -> {
+            if (showingQuizzes) showQuizEditor(null);
+            else showEditor(null);
+        });
+
+        binding.tabContent.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override public void onTabSelected(TabLayout.Tab tab) { showTab(tab.getPosition() == 1); }
+            @Override public void onTabUnselected(TabLayout.Tab tab) { }
+            @Override public void onTabReselected(TabLayout.Tab tab) { }
+        });
 
         startListening();
+        startListeningQuizzes();
+        showTab(false);
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
         if (registration != null) registration.remove();
+        if (quizRegistration != null) quizRegistration.remove();
         binding = null;
     }
 
-    // ── Live list ─────────────────────────────────────────────────
+    // ── Tabs ──────────────────────────────────────────────────────
+
+    private void showTab(boolean quizzesTab) {
+        showingQuizzes = quizzesTab;
+        if (quizzesTab) binding.rvLessons.setAdapter(quizAdapter);
+        else            binding.rvLessons.setAdapter(adapter);
+        binding.fabAdd.setText(quizzesTab ? "New question" : "New lesson");
+        binding.tvQuizHint.setVisibility(quizzesTab ? View.VISIBLE : View.GONE);
+        refreshState();
+    }
+
+    /** Spinner / empty message / error text / quiz-pool hint for whichever tab is showing. */
+    private void refreshState() {
+        if (binding == null) return;
+
+        boolean loaded = showingQuizzes ? quizzesLoaded : lessonsLoaded;
+        String error   = showingQuizzes ? quizzesError : lessonsError;
+        int count      = showingQuizzes ? quizzes.size() : current.size();
+
+        binding.progressBar.setVisibility(loaded ? View.GONE : View.VISIBLE);
+
+        if (error != null) {
+            binding.tvEmpty.setText("Couldn't load "
+                    + (showingQuizzes ? "quiz questions" : "lessons") + ".\n" + error);
+            binding.tvEmpty.setVisibility(View.VISIBLE);
+        } else if (loaded && count == 0) {
+            binding.tvEmpty.setText(showingQuizzes
+                    ? "No quiz questions yet.\nTap “New question” to add one.\n\nUntil at least "
+                        + QUIZ_MIN_POOL + " are published, learners get the 10 built-in questions."
+                    : "No lessons yet.\nTap “New lesson” to create the first one.");
+            binding.tvEmpty.setVisibility(View.VISIBLE);
+        } else {
+            binding.tvEmpty.setVisibility(View.GONE);
+        }
+
+        if (showingQuizzes) updateQuizHint();
+    }
+
+    private void updateQuizHint() {
+        int usable = 0;
+        for (QuizQuestion q : quizzes) if (q.isPublished() && q.isValid()) usable++;
+
+        binding.tvQuizHint.setText(usable >= QUIZ_MIN_POOL
+                ? "✅ " + usable + " published questions. Each day the app picks " + QUIZ_MIN_POOL
+                    + " of them, the same ones for every learner."
+                : "⚠️ " + usable + " published, but at least " + QUIZ_MIN_POOL + " are needed. Until then "
+                    + "learners get the 10 built-in questions instead of yours.");
+    }
+
+    // ── Live lists ────────────────────────────────────────────────
 
     private void startListening() {
         // Staff can read drafts too (see lessons rule); learners only get published ones.
@@ -94,18 +190,48 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
                 .orderBy("orderIndex")
                 .addSnapshotListener((snap, error) -> {
                     if (binding == null) return;
-                    binding.progressBar.setVisibility(View.GONE);
+                    lessonsLoaded = true;
 
                     if (error != null || snap == null) {
-                        binding.tvEmpty.setText("Couldn't load lessons.\n"
-                                + (error != null ? error.getMessage() : ""));
-                        binding.tvEmpty.setVisibility(View.VISIBLE);
+                        lessonsError = error != null ? error.getMessage() : "unknown error";
+                        refreshState();
                         return;
                     }
+                    lessonsError = null;
                     current = new ArrayList<>(snap.toObjects(Lesson.class));
                     adapter.submit(current);
-                    binding.tvEmpty.setText("No lessons yet.\nTap “New lesson” to create the first one.");
-                    binding.tvEmpty.setVisibility(current.isEmpty() ? View.VISIBLE : View.GONE);
+                    refreshState();
+                });
+    }
+
+    private void startListeningQuizzes() {
+        // Same rule as lessons: staff see drafts, learners only published questions.
+        quizRegistration = db.collection(Constants.COLLECTION_QUIZZES)
+                .addSnapshotListener((snap, error) -> {
+                    if (binding == null) return;
+                    quizzesLoaded = true;
+
+                    if (error != null || snap == null) {
+                        quizzesError = error != null ? error.getMessage() : "unknown error";
+                        refreshState();
+                        return;
+                    }
+                    quizzesError = null;
+
+                    // Convert one by one: a hand-edited document with a wrong field type is skipped
+                    // instead of crashing the whole list.
+                    List<QuizQuestion> list = new ArrayList<>();
+                    for (DocumentSnapshot doc : snap.getDocuments()) {
+                        try {
+                            QuizQuestion q = doc.toObject(QuizQuestion.class);
+                            if (q != null) list.add(q);
+                        } catch (RuntimeException ignored) { }
+                    }
+                    Collections.sort(list, (x, y) ->
+                            safe(x.getQuestion()).compareToIgnoreCase(safe(y.getQuestion())));
+                    quizzes = list;
+                    quizAdapter.submit(quizzes);
+                    refreshState();
                 });
     }
 
@@ -318,6 +444,164 @@ public class CmsFragment extends Fragment implements CmsLessonAdapter.Listener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
             toast("Save failed: " + e.getMessage());
         });
+    }
+
+    // ── Daily quiz questions ──────────────────────────────────────
+
+    private void confirmDeleteQuiz(QuizQuestion q) {
+        if (q.getId() == null) return;
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Delete this question?")
+                .setMessage("It will be removed from the daily quiz for everyone. "
+                        + "Tip: unpublish it instead if you might want it back.")
+                .setPositiveButton("Delete", (d, w) ->
+                        db.collection(Constants.COLLECTION_QUIZZES).document(q.getId())
+                                .delete()
+                                .addOnFailureListener(e -> toast("Delete failed: " + e.getMessage())))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void setQuizPublished(QuizQuestion q, boolean published) {
+        if (q.getId() == null) return;
+        if (published && !q.isValid()) {
+            toast("Edit this question first: it needs a correct answer and 2-4 options.");
+            quizAdapter.submit(quizzes);      // put the switch back
+            return;
+        }
+        db.collection(Constants.COLLECTION_QUIZZES).document(q.getId())
+                .update("published", published)
+                .addOnFailureListener(e -> {
+                    toast("Couldn't change status: " + e.getMessage());
+                    quizAdapter.submit(quizzes);
+                });
+    }
+
+    private void showQuizEditor(@Nullable QuizQuestion editing) {
+        DialogQuizEditBinding d = DialogQuizEditBinding.inflate(getLayoutInflater());
+
+        d.actvCategory.setAdapter(new ArrayAdapter<>(
+                requireContext(), android.R.layout.simple_dropdown_item_1line, QUIZ_CATEGORIES));
+
+        EditText[] optionFields = {d.etOptionA, d.etOptionB, d.etOptionC, d.etOptionD};
+        int[] correctIds = {R.id.btnCorrectA, R.id.btnCorrectB, R.id.btnCorrectC, R.id.btnCorrectD};
+
+        if (editing != null) {
+            d.etQuestion.setText(editing.getQuestion());
+            List<String> opts = editing.getOptions();
+            for (int i = 0; i < optionFields.length; i++) {
+                if (opts != null && i < opts.size()) optionFields[i].setText(opts.get(i));
+            }
+            int idx = editing.getCorrectIndex();
+            if (idx >= 0 && idx < correctIds.length) d.toggleCorrect.check(correctIds[idx]);
+            d.etExplanation.setText(editing.getExplanation());
+            boolean hasCategory = editing.getCategory() != null && !editing.getCategory().isEmpty();
+            d.actvCategory.setText(hasCategory ? editing.getCategory() : "None", false);
+            d.switchPublished.setChecked(editing.isPublished());
+        } else {
+            d.actvCategory.setText("None", false);
+            d.switchPublished.setChecked(false);   // new questions start as drafts
+        }
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(editing == null ? "New daily quiz question" : "Edit quiz question")
+                .setView(d.getRoot())
+                .setPositiveButton("Save", null)      // real handler below, so we can keep it open on errors
+                .setNegativeButton("Cancel", null)
+                .create();
+        dialog.show();
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> validateAndSaveQuiz(d, editing, dialog));
+    }
+
+    private void validateAndSaveQuiz(DialogQuizEditBinding d, @Nullable QuizQuestion editing,
+                                     AlertDialog dialog) {
+        TextInputLayout[] optionLayouts = {d.tilOptionA, d.tilOptionB, d.tilOptionC, d.tilOptionD};
+        int[] correctIds = {R.id.btnCorrectA, R.id.btnCorrectB, R.id.btnCorrectC, R.id.btnCorrectD};
+
+        // Clear old errors
+        d.tilQuestion.setError(null);
+        for (TextInputLayout til : optionLayouts) til.setError(null);
+        d.tvCorrectError.setVisibility(View.GONE);
+        d.tilExplanation.setError(null);
+
+        String question    = textOf(d.etQuestion);
+        String[] opt       = {textOf(d.etOptionA), textOf(d.etOptionB),
+                              textOf(d.etOptionC), textOf(d.etOptionD)};
+        String explanation = textOf(d.etExplanation);
+        String categoryTxt = textOf(d.actvCategory);
+        int checked        = d.toggleCorrect.getCheckedButtonId();
+
+        boolean ok = true;
+
+        if (question.length() < 10 || question.length() > 300) {
+            d.tilQuestion.setError("10–300 characters"); ok = false;
+        }
+        if (opt[0].isEmpty()) { optionLayouts[0].setError("Required"); ok = false; }
+        if (opt[1].isEmpty()) { optionLayouts[1].setError("Required"); ok = false; }
+        // No gaps: C may only be skipped if D is skipped too, so option positions stay aligned
+        if (opt[2].isEmpty() && !opt[3].isEmpty()) {
+            optionLayouts[2].setError("Fill option C before option D"); ok = false;
+        }
+        for (int i = 1; i < opt.length; i++) {
+            for (int j = 0; j < i; j++) {
+                if (!opt[i].isEmpty() && opt[i].equalsIgnoreCase(opt[j])) {
+                    optionLayouts[i].setError("Same as option " + (char) ('A' + j));
+                    ok = false;
+                    break;
+                }
+            }
+        }
+
+        int correctIndex = -1;
+        for (int i = 0; i < correctIds.length; i++) if (checked == correctIds[i]) correctIndex = i;
+        if (correctIndex < 0) {
+            d.tvCorrectError.setText("Choose the correct option");
+            d.tvCorrectError.setVisibility(View.VISIBLE);
+            ok = false;
+        } else if (opt[correctIndex].isEmpty()) {
+            d.tvCorrectError.setText("The option you marked correct is empty");
+            d.tvCorrectError.setVisibility(View.VISIBLE);
+            ok = false;
+        }
+
+        if (explanation.length() < 10 || explanation.length() > 600) {
+            d.tilExplanation.setError("10–600 characters"); ok = false;
+        }
+        if (!ok) return;
+
+        List<String> options = new ArrayList<>();
+        for (String o : opt) if (!o.isEmpty()) options.add(o);   // contiguous, so correctIndex still matches
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("question", question);
+        data.put("options", options);
+        data.put("correctIndex", correctIndex);
+        data.put("explanation", explanation);
+        data.put("category", categoryTxt.isEmpty() || "None".equals(categoryTxt) ? null : categoryTxt);
+        data.put("published", d.switchPublished.isChecked());
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+
+        com.google.android.gms.tasks.Task<?> task;
+        if (editing == null || editing.getId() == null) {
+            task = db.collection(Constants.COLLECTION_QUIZZES).add(data);
+        } else {
+            task = db.collection(Constants.COLLECTION_QUIZZES).document(editing.getId()).update(data);
+        }
+
+        task.addOnSuccessListener(r -> {
+            dialog.dismiss();
+            toast(editing == null ? "Question added." : "Saved.");
+        }).addOnFailureListener(e -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+            toast("Save failed: " + e.getMessage());
+        });
+    }
+
+    private static String safe(@Nullable String s) {
+        return s == null ? "" : s;
     }
 
     // ── Helpers ───────────────────────────────────────────────────
