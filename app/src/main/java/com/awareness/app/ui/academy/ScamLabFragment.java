@@ -5,13 +5,14 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.SpannableString;
+import android.text.TextPaint;
+import android.text.method.LinkMovementMethod;
 import android.text.Spanned;
 import android.text.style.BackgroundColorSpan;
 import android.text.style.ClickableSpan;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StrikethroughSpan;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -36,6 +37,8 @@ import com.google.firebase.firestore.QueryDocumentSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ScamLabFragment extends Fragment {
 
@@ -47,6 +50,10 @@ public class ScamLabFragment extends Fragment {
 
     // The SpannableString that makes text tappable
     private SpannableString spannableMessage;
+
+    // inputLocked: the game is over, ignore further taps. submitted: the score was already saved.
+    private boolean inputLocked = false;
+    private boolean submitted   = false;
 
     // ── Lifecycle ─────────────────────────────────────────────────
 
@@ -118,10 +125,17 @@ public class ScamLabFragment extends Fragment {
      */
     private void startGame(ScamScenario scenario) {
         engine = new ScamLabEngine(scenario);
+        inputLocked = false;
+        submitted   = false;
+        binding.btnHint.setEnabled(true);      // were left disabled after a previous round
+        binding.btnHint.setAlpha(1f);
+        binding.btnSubmit.setEnabled(true);
+        binding.tvTapFeedback.setVisibility(View.INVISIBLE);
 
         renderScenarioHeader(scenario);
         renderMessageWithTappableSpans(scenario);
         updateFlagCounter();
+        updateLives();
         setupGameButtons();
 
         showState(GameState.PLAYING);
@@ -152,97 +166,118 @@ public class ScamLabFragment extends Fragment {
     /**
      * The most important rendering function.
      *
-     * Takes the plain message text and converts it into a SpannableString
-     * where every character is tappable. We use a custom TouchListener
-     * (not ClickableSpan) because ClickableSpan requires
-     * android:autoLink which conflicts with our custom spans.
+     * EVERY WORD of the message becomes its own tappable span (WordSpan), so any part of the message
+     * can be chosen. Red-flag words are NOT underlined or marked in any way, because that would give
+     * the answers away.
      *
-     * How it works:
-     * 1. Build a SpannableString from the message text
-     * 2. Apply a subtle underline to each red flag zone so players
-     *    can see "something is here" (a soft hint by design)
-     * 3. Set a custom OnTouchListener that maps the tap X/Y
-     *    coordinates → character offset → engine.onTextTapped()
+     * Why ClickableSpan + LinkMovementMethod: the previous version used a custom OnTouchListener that
+     * only reacted to ACTION_UP but never accepted ACTION_DOWN. Android only delivers the finger-lift
+     * to a view that accepted the touch-down, so taps were silently ignored. LinkMovementMethod
+     * handles the whole touch sequence (and works inside a ScrollView).
      */
     private void renderMessageWithTappableSpans(ScamScenario scenario) {
-        String message = scenario.getMessage();
+        String message = scenario.getMessage() != null ? scenario.getMessage() : "";
         spannableMessage = new SpannableString(message);
 
-        // Apply very faint underlines to red flag regions
-        // This is intentionally subtle — not a giveaway, just a hint that
-        // the text is interactive. Players still need to find the right words.
-        if (scenario.getRedFlags() != null) {
-            for (ScamScenario.RedFlag flag : scenario.getRedFlags()) {
-                spannableMessage.setSpan(
-                        new android.text.style.UnderlineSpan(),
-                        flag.getStart(),
-                        flag.getEnd(),
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-            }
+        Matcher word = Pattern.compile("\\S+").matcher(message);   // a "word" = anything between spaces
+        while (word.find()) {
+            spannableMessage.setSpan(
+                    new WordSpan(word.start(), word.end()),
+                    word.start(), word.end(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
 
         binding.tvMessage.setText(spannableMessage);
-        binding.tvMessage.setMovementMethod(null); // We handle touch manually
+        binding.tvMessage.setMovementMethod(LinkMovementMethod.getInstance());
 
-        // ── Custom touch listener ──────────────────────────────────
-        // Maps finger position to a character offset in the TextView
-        binding.tvMessage.setOnTouchListener((v, event) -> {
-            if (event.getAction() != MotionEvent.ACTION_UP) return false;
+        // The soft blue flash while a word is pressed
+        int blue = ContextCompat.getColor(requireContext(), R.color.brand_blue);
+        binding.tvMessage.setHighlightColor((blue & 0x00FFFFFF) | 0x40000000);
+    }
 
-            TextView textView = (TextView) v;
-            int offset = getCharacterOffset(textView, event);
-            if (offset < 0) return false;
+    /** One tappable word. Keeps the normal text colour (no link blue, no underline). */
+    private class WordSpan extends ClickableSpan {
+        private final int start;
+        private final int end;
 
-            handleTap(offset);
-            return true;
-        });
+        WordSpan(int start, int end) {
+            this.start = start;
+            this.end   = end;
+        }
+
+        @Override
+        public void onClick(@NonNull View widget) {
+            handleSegmentTap(start, end);
+        }
+
+        @Override
+        public void updateDrawState(@NonNull TextPaint ds) {
+            ds.setUnderlineText(false);   // don't change colour: the message must look like plain text
+        }
     }
 
     /**
-     * Converts a touch event (x, y) on a TextView into a character offset.
-     * This is the standard way to map finger position → text character in Android.
+     * Called after every tap on a word. Asks the engine what the tap was, then updates the screen.
+     * The game ends (and the score is finalized) when all flags are found OR on the 2nd wrong word.
      */
-    private int getCharacterOffset(TextView textView, MotionEvent event) {
-        int x = (int) event.getX() - textView.getTotalPaddingLeft()
-                + textView.getScrollX();
-        int y = (int) event.getY() - textView.getTotalPaddingTop()
-                + textView.getScrollY();
+    private void handleSegmentTap(int start, int end) {
+        if (inputLocked || binding == null) return;
 
-        android.text.Layout layout = textView.getLayout();
-        if (layout == null) return -1;
-
-        int line = layout.getLineForVertical(y);
-        return layout.getOffsetForHorizontal(line, x);
-    }
-
-    /**
-     * Called after every tap on the message text.
-     * Asks the engine if the tap hit a red flag, then updates the UI.
-     */
-    private void handleTap(int characterOffset) {
-        int result = engine.onTextTapped(characterOffset);
+        int result = engine.onSegmentTapped(start, end);
 
         if (result >= 0) {
             // ✅ New red flag found!
             ScamScenario.RedFlag flag = engine.getScenario().getRedFlags().get(result);
             highlightFoundFlag(flag, result);
             updateFlagCounter();
-            showTapFeedback("🚩 Red Flag Found: " + flag.getLabel(), true);
 
-            // Auto-submit if all flags found
             if (engine.allFlagsFound()) {
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        this::submitGame, 800);
+                showTapFeedback("🎉 You found every red flag!", true);
+                finishGameSoon();
+            } else {
+                showTapFeedback("🚩 Red Flag Found: " + flag.getLabel(), true);
             }
 
-        } else if (result == -2) {
-            // Already found this one
+        } else if (result == ScamLabEngine.RESULT_WRONG) {
+            // ❌ Not a red flag: cross the word out and use up a life
+            markWrongWord(start, end);
+            updateLives();
+
+            if (engine.getLivesLeft() == 0) {
+                showTapFeedback("❌ Second wrong tap. Game over!", false);
+                finishGameSoon();
+            } else {
+                showTapFeedback("❌ Not a red flag. " + engine.getLivesLeft()
+                        + (engine.getLivesLeft() == 1 ? " life left!" : " lives left!"), false);
+            }
+
+        } else if (result == ScamLabEngine.RESULT_ALREADY_FOUND) {
             showTapFeedback("Already flagged!", false);
-        } else {
-            // Tapped empty space
-            showTapFeedback("Nothing suspicious here. Keep looking!", false);
+
+        } else if (result == ScamLabEngine.RESULT_ALREADY_WRONG) {
+            showTapFeedback("You already tried that word.", false);
         }
+    }
+
+    /** Locks the message, shows the last feedback for a moment, then finalizes the score. */
+    private void finishGameSoon() {
+        inputLocked = true;
+        binding.btnHint.setEnabled(false);
+        binding.btnSubmit.setEnabled(false);
+        new Handler(Looper.getMainLooper()).postDelayed(this::submitGame, 1200);
+    }
+
+    /** Strikes through a wrongly tapped word, on a faint red background. */
+    private void markWrongWord(int start, int end) {
+        int red = ContextCompat.getColor(requireContext(), R.color.error_red);
+        spannableMessage.setSpan(new BackgroundColorSpan((red & 0x00FFFFFF) | 0x33000000),
+                start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        spannableMessage.setSpan(new StrikethroughSpan(),
+                start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        spannableMessage.setSpan(
+                new ForegroundColorSpan(ContextCompat.getColor(requireContext(), R.color.text_secondary)),
+                start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        binding.tvMessage.setText(spannableMessage);
     }
 
     /**
@@ -318,6 +353,10 @@ public class ScamLabFragment extends Fragment {
      * and transitions to the result state.
      */
     private void submitGame() {
+        if (binding == null || submitted) return;   // screen closed, or already finalized
+        submitted   = true;
+        inputLocked = true;
+
         int xpEarned = engine.calculateXpEarned();
         saveScoreToFirestore(xpEarned);
         showResultScreen(xpEarned);
@@ -342,6 +381,7 @@ public class ScamLabFragment extends Fragment {
                     put("scenarioId", engine.getScenario().getScenarioId());
                     put("flagsFound", engine.getFoundCount());
                     put("totalFlags", engine.getTotalFlags());
+                    put("mistakes",   engine.getMistakes());
                     put("xpEarned",   xpEarned);
                     put("playedAt",   FieldValue.serverTimestamp());
                 }});
@@ -359,8 +399,10 @@ public class ScamLabFragment extends Fragment {
     private void showResultScreen(int xpEarned) {
         // Fill result header
         binding.tvResultTitle.setText(engine.getResultTitle());
+        String endReason = engine.getEndReason();
         binding.tvResultScore.setText(
-                engine.getFoundCount() + " / " + engine.getTotalFlags() + " Red Flags Found");
+                engine.getFoundCount() + " / " + engine.getTotalFlags() + " Red Flags Found"
+                        + (endReason.isEmpty() ? "" : "\n" + endReason));
         binding.tvResultXp.setText("+" + xpEarned + " XP Earned");
 
         // Play Lottie animation
@@ -417,6 +459,15 @@ public class ScamLabFragment extends Fragment {
         binding.progressFlags.setProgress(progress, true);
     }
 
+    /** ❤️❤️ → ❤️🖤 → 🖤🖤 : lives left (a wrong word costs one). */
+    private void updateLives() {
+        StringBuilder hearts = new StringBuilder();
+        for (int i = 0; i < ScamLabEngine.MAX_MISTAKES; i++) {
+            hearts.append(i < engine.getLivesLeft() ? "❤️" : "🖤");
+        }
+        binding.tvLives.setText(hearts.toString());
+    }
+
     /**
      * Shows a brief feedback message after each tap.
      * Fades out automatically after 1.5 seconds.
@@ -428,7 +479,7 @@ public class ScamLabFragment extends Fragment {
         binding.tvTapFeedback.setVisibility(View.VISIBLE);
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (isAdded()) binding.tvTapFeedback.setVisibility(View.INVISIBLE);
+            if (binding != null) binding.tvTapFeedback.setVisibility(View.INVISIBLE);
         }, 1500);
     }
 
@@ -447,11 +498,15 @@ public class ScamLabFragment extends Fragment {
     // ── Demo Scenario (used when Firestore is empty) ──────────────
 
     /**
-     * A hardcoded demo scenario used as a fallback.
-     * This also serves as the template for adding scenarios to Firestore.
+     * A hardcoded demo scenario used as a fallback when Firestore has no published scenarios.
      *
-     * Red flag positions are CHARACTER INDICES into the message string.
-     * Count them carefully when adding new scenarios!
+     * Red flags are given by their exact words, and the game locates them in the message itself
+     * (see ScamLabEngine.resolveFlagPositions). The original version used hand-counted character
+     * numbers that were off by 6-21 characters, so the real URL / OTP words weren't inside the flags.
+     *
+     * To add scenarios to Firestore (collection "scam_scenarios", published = true), copy this shape:
+     *   message, title, category, scenarioType, senderLabel, xpReward, and redFlags: an array of
+     *   {text: "exact words", label: "...", explanation: "..."}
      */
     private ScamScenario buildDemoScenario() {
         ScamScenario s = new ScamScenario();
@@ -461,7 +516,6 @@ public class ScamLabFragment extends Fragment {
         s.setSenderLabel("Vietcombank");
         s.setXpReward(Constants.XP_PER_SCAM_LAB);
 
-        // The message — count characters to find flag indices
         String msg =
                 "Tài khoản VCB của bạn đã bị khóa. " +
                         "Truy cập http://vcb-secure.tk/verify " +
@@ -470,44 +524,35 @@ public class ScamLabFragment extends Fragment {
                         "Hỗ trợ: 1900.fake.vietcombank.com";
         s.setMessage(msg);
 
-        // Red Flag 1: Fake URL (positions 35–63)
-        ScamScenario.RedFlag flag1 = new ScamScenario.RedFlag();
-        flag1.setStart(35);
-        flag1.setEnd(63);
-        flag1.setLabel("Fake Domain");
-        flag1.setExplanation(
+        List<ScamScenario.RedFlag> flags = new ArrayList<>();
+
+        flags.add(makeFlag("http://vcb-secure.tk/verify", "Fake Domain",
                 "\"vcb-secure.tk\" is NOT a real Vietcombank domain. " +
                         "The real domain is vietcombank.com.vn. " +
-                        ".tk domains are free and commonly used by scammers.");
+                        ".tk domains are free and commonly used by scammers."));
 
-        // Red Flag 2: Asking for OTP (positions 83–104)
-        ScamScenario.RedFlag flag2 = new ScamScenario.RedFlag();
-        flag2.setStart(83);
-        flag2.setEnd(104);
-        flag2.setLabel("OTP in Message");
-        flag2.setExplanation(
+        flags.add(makeFlag("Nhập mã OTP: 482910", "OTP in Message",
                 "Real banks NEVER send your OTP inside an SMS. " +
                         "An OTP is a one-time password YOU generate or receive to log in — " +
                         "any message containing an OTP is asking you to confirm a transaction " +
-                        "you didn't make.");
+                        "you didn't make."));
 
-        // Red Flag 3: Fake hotline URL (positions 109–143)
-        ScamScenario.RedFlag flag3 = new ScamScenario.RedFlag();
-        flag3.setStart(109);
-        flag3.setEnd(143);
-        flag3.setLabel("Fake Support URL");
-        flag3.setExplanation(
+        flags.add(makeFlag("1900.fake.vietcombank.com", "Fake Support URL",
                 "The support link contains \"fake\" in the domain and is not " +
                         "an official Vietcombank address. Scammers insert bank names " +
-                        "into fake URLs to look legitimate.");
+                        "into fake URLs to look legitimate."));
 
-        List<ScamScenario.RedFlag> flags = new ArrayList<>();
-        flags.add(flag1);
-        flags.add(flag2);
-        flags.add(flag3);
         s.setRedFlags(flags);
-
         return s;
+    }
+
+    /** A red flag identified by its exact words; the engine finds its position in the message. */
+    private ScamScenario.RedFlag makeFlag(String exactText, String label, String explanation) {
+        ScamScenario.RedFlag flag = new ScamScenario.RedFlag();
+        flag.setText(exactText);
+        flag.setLabel(label);
+        flag.setExplanation(explanation);
+        return flag;
     }
 
     // ── Cleanup ───────────────────────────────────────────────────

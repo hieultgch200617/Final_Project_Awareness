@@ -87,7 +87,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Tap on any suspicious parts of the message below to flag them as red flags."
+                            android:text="Tap the words that look suspicious. Every word is a choice, and 2 wrong taps end the game."
                             android:textColor="@color/text_primary"
                             android:textSize="13sp"
                             android:fontFamily="@font/poppins_regular"/>
@@ -113,6 +113,18 @@
                         android:fontFamily="@font/poppins_semibold"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent"/>
+
+                    <!-- Lives: ❤️❤️ (a wrong word costs one; at 0 the game ends) -->
+                    <TextView
+                        android:id="@+id/tvLives"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="❤️❤️"
+                        android:textSize="16sp"
+                        app:layout_constraintStart_toEndOf="@id/tvFlagCount"
+                        app:layout_constraintEnd_toStartOf="@id/btnHint"
+                        app:layout_constraintTop_toTopOf="@id/tvFlagCount"
+                        app:layout_constraintBottom_toBottomOf="@id/tvFlagCount"/>
 
                     <!-- Hint button (top right) -->
                     <com.google.android.material.button.MaterialButton

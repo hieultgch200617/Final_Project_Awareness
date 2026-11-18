@@ -20,7 +20,7 @@
             app:titleTextColor="@color/white"
             app:titleTextAppearance="@style/ToolbarTitleStyle"/>
 
-        <!-- Lessons | Daily Quiz -->
+        <!-- Lessons | Daily Quiz | Scam Lab -->
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabContent"
             android:layout_width="match_parent"
@@ -42,6 +42,11 @@
                 android:layout_height="wrap_content"
                 android:text="🧠  Daily Quiz"/>
 
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔬  Scam Lab"/>
+
         </com.google.android.material.tabs.TabLayout>
 
     </com.google.android.material.appbar.AppBarLayout>
@@ -52,7 +57,7 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Daily Quiz tab only: how many questions are in the pool -->
+        <!-- Daily Quiz and Scam Lab tabs only: how many are published and how they are used -->
         <TextView
             android:id="@+id/tvQuizHint"
             android:layout_width="match_parent"

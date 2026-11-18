@@ -2,6 +2,8 @@ package com.awareness.app.ui.auth;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -10,6 +12,7 @@ import android.text.style.ClickableSpan;
 import android.text.style.ForegroundColorSpan;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -20,6 +23,7 @@ import com.awareness.app.model.User;
 import com.awareness.app.ui.MainActivity;
 import com.awareness.app.utils.Constants;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 public class RegisterActivity extends AppCompatActivity {
@@ -27,6 +31,19 @@ public class RegisterActivity extends AppCompatActivity {
     private ActivityRegisterBinding binding;
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
+
+    // The server can be slow or unreachable (blocked network). Never leave the user on a spinner.
+    private static final long AUTH_TIMEOUT_MS   = 20_000;  // creating the account
+    private static final long FIRESTORE_WAIT_MS = 6_000;   // waiting for the server to confirm the profile
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private boolean proceeded = false;                     // we already moved on to the app
+
+    private final Runnable authTimeout = () -> {
+        if (isFinishing() || isDestroyed()) return;
+        setLoading(false);
+        showError("Still no answer from the server. Check your internet connection "
+                + "(school or public Wi-Fi can block Firebase), then try again.");
+    };
 
     // List of Vietnam regions for the dropdown spinner
     private static final String[] VIETNAM_REGIONS = {
@@ -138,50 +155,75 @@ public class RegisterActivity extends AppCompatActivity {
         hideError();
 
         setLoading(true);
+        proceeded = false;
+        handler.postDelayed(authTimeout, AUTH_TIMEOUT_MS);
 
         // ── Step 1: Create account in Firebase Auth ──────────────
         mAuth.createUserWithEmailAndPassword(email, password)
                 .addOnSuccessListener(authResult -> {
+                    handler.removeCallbacks(authTimeout);
                     String uid = authResult.getUser().getUid();
 
                     // ── Step 2: Create User document in Firestore ─
                     createFirestoreUser(uid, name, email, region);
                 })
                 .addOnFailureListener(e -> {
+                    handler.removeCallbacks(authTimeout);
                     setLoading(false);
-                    showError(getFriendlyErrorMessage(e.getMessage()));
+                    showError(AuthErrors.describe(e, true));   // says what actually went wrong
                 });
     }
 
     /**
      * Creates a User document in Firestore after successful Firebase Auth signup.
      * This stores the user's name, role, XP, streak, and region.
+     *
+     * Firestore only reports success once the SERVER has confirmed the write. On a blocked or offline
+     * connection that never happens, which used to leave "Creating account..." spinning forever even
+     * though the account already existed. The write is kept on the device and sent when the connection
+     * works, so after a short wait we continue into the app regardless.
      */
     private void createFirestoreUser(String uid, String name, String email, String region) {
         // Create a User object using our model class
         User newUser = new User(uid, name, email);
         newUser.setRegion(region);
 
+        final Runnable stopWaiting = () -> enterApp(null);
+        handler.postDelayed(stopWaiting, FIRESTORE_WAIT_MS);
+
         // Write it to Firestore under: users/{uid}
         db.collection(Constants.COLLECTION_USERS)
                 .document(uid)
                 .set(newUser)
                 .addOnSuccessListener(unused -> {
-                    setLoading(false);
-                    // All done — go to the main app
-                    Intent intent = new Intent(this, MainActivity.class);
-                    // Clear the back stack so user can't go back to Register
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
+                    handler.removeCallbacks(stopWaiting);
+                    enterApp(null);
                 })
                 .addOnFailureListener(e -> {
-                    setLoading(false);
-                    // Auth account was created but Firestore write failed.
-                    // Still proceed — we can retry writing user data later.
-                    Intent intent = new Intent(this, MainActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
+                    handler.removeCallbacks(stopWaiting);
+                    // Auth account exists but the profile write was rejected. Tell the user why;
+                    // signing in later repairs the missing profile automatically.
+                    boolean denied = e instanceof FirebaseFirestoreException
+                            && ((FirebaseFirestoreException) e).getCode()
+                                == FirebaseFirestoreException.Code.PERMISSION_DENIED;
+                    enterApp(denied
+                            ? "Account created, but Firestore's rules refused to save your profile."
+                            : "Account created, but your profile couldn't be saved yet.");
                 });
+    }
+
+    /** Goes to the main app, once. */
+    private void enterApp(String warning) {
+        if (proceeded || isFinishing() || isDestroyed()) return;
+        proceeded = true;
+        setLoading(false);
+        if (warning != null) {
+            Toast.makeText(getApplicationContext(), warning, Toast.LENGTH_LONG).show();
+        }
+        Intent intent = new Intent(this, MainActivity.class);
+        // Clear the back stack so user can't go back to Register
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
     }
 
     // ── UI Helpers ───────────────────────────────────────────────
@@ -201,11 +243,9 @@ public class RegisterActivity extends AppCompatActivity {
         binding.tvError.setVisibility(View.GONE);
     }
 
-    private String getFriendlyErrorMessage(String raw) {
-        if (raw == null) return "Registration failed. Please try again.";
-        if (raw.contains("email address is already in use")) return "This email is already registered.";
-        if (raw.contains("badly formatted"))                 return "Please enter a valid email address.";
-        if (raw.contains("network"))                         return "Network error. Check your connection.";
-        return "Registration failed. Please try again.";
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        handler.removeCallbacksAndMessages(null);
     }
 }

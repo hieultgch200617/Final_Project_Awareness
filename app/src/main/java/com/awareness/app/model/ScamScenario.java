@@ -15,16 +15,24 @@ public class ScamScenario {
     private String message;         // The full body text of the fake scam message
     private int    xpReward;        // Base XP for completing (bonus per flag found)
     private List<RedFlag> redFlags; // The hidden suspicious elements
+    private boolean published;     // Only published scenarios are offered to players
 
     // ── Required no-arg constructor ──────────────────────────────
     public ScamScenario() {}
 
     // ── Inner class: RedFlag ─────────────────────────────────────
     // A RedFlag is a suspicious segment inside the message text.
-    // start/end are character indices into the message string.
+    //
+    // Two ways to say WHERE it is:
+    //   1. text  (recommended): the exact words, e.g. "http://vcb-secure.tk/verify".
+    //      The game finds them in the message itself, so you never have to count characters.
+    //   2. start / end: character indices into the message (the original way).
+    //      Easy to get wrong by a few characters, which makes the "right" word count as a mistake.
+    // If `text` is set and found in the message, it wins over start/end.
     public static class RedFlag {
         private int    start;           // Start index in message text
         private int    end;             // End index in message text
+        private String text;            // OPTIONAL: exact words of the flag (see above)
         private String label;           // Short name e.g. "Suspicious URL"
         private String explanation;     // Full explanation shown after submit
 
@@ -35,6 +43,9 @@ public class ScamScenario {
 
         public int    getEnd()                     { return end; }
         public void   setEnd(int end)              { this.end = end; }
+
+        public String getText()                    { return text; }
+        public void   setText(String text)         { this.text = text; }
 
         public String getLabel()                   { return label; }
         public void   setLabel(String label)       { this.label = label; }
@@ -65,6 +76,9 @@ public class ScamScenario {
 
     public int    getXpReward()                            { return xpReward; }
     public void   setXpReward(int xpReward)                { this.xpReward = xpReward; }
+
+    public boolean isPublished()                           { return published; }
+    public void    setPublished(boolean published)         { this.published = published; }
 
     public List<RedFlag> getRedFlags()                     { return redFlags; }
     public void          setRedFlags(List<RedFlag> flags)  { this.redFlags = flags; }
