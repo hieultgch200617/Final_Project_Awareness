@@ -3,6 +3,9 @@ package com.awareness.app.network;
 import com.awareness.app.utils.Constants;
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * IPQualityScore phone-validation response (only the fields the app uses).
  * Every field that IPQS can omit or send as null is a boxed type, so a missing value never
@@ -61,6 +64,18 @@ public class PhoneCheckResponse {
 
     public boolean isVoip() {
         return Boolean.TRUE.equals(voip) || "VOIP".equalsIgnoreCase(lineType);
+    }
+
+    /** The warning signs found, in plain words (also saved with the number in "My lists"). */
+    public List<String> getWarningSigns() {
+        List<String> signs = new ArrayList<>();
+        if (hasRecentAbuse()) signs.add("Linked to recent fraud or abuse");
+        if (isSpammer())      signs.add("Flagged as a spammer");
+        if (isRisky())        signs.add("Flagged as risky");
+        if (isDisconnected()) signs.add("Not an active line (could be spoofed)");
+        if (isPrepaid())      signs.add("Prepaid line");
+        if (isVoip())         signs.add("Internet (VoIP) number");
+        return signs;
     }
 
     // ── Display helpers used by GuardianFragment ──────────────────

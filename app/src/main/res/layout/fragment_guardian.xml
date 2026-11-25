@@ -145,6 +145,19 @@
                     app:icon="@drawable/ic_shield"
                     app:iconGravity="textStart"/>
 
+                <!-- Opens the Blacklist / Graylist / Whitelist sheet on its Websites tab -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMyListsUrl"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="📋 My lists (black · gray · white)"
+                    android:textAllCaps="false"
+                    android:textColor="@color/brand_navy"
+                    android:fontFamily="@font/poppins_semibold"
+                    app:cornerRadius="12dp"/>
+
                 <!-- Loading bar (shown while API call is in progress) -->
                 <com.google.android.material.progressindicator.LinearProgressIndicator
                     android:id="@+id/progressUrl"
@@ -247,6 +260,17 @@
                             android:fontFamily="@font/poppins_medium"
                             android:layout_marginTop="8dp"/>
 
+                        <!-- Which list this website was just filed under -->
+                        <TextView
+                            android:id="@+id/tvUrlListStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp"
+                            android:fontFamily="@font/poppins_semibold"
+                            android:visibility="gone"/>
+
                     </LinearLayout>
 
                 </androidx.cardview.widget.CardView>
@@ -337,6 +361,19 @@
                     app:icon="@drawable/ic_search"
                     app:iconGravity="textStart"/>
 
+                <!-- Opens the Blacklist / Graylist / Whitelist sheet -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMyLists"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="📋 My lists (black · gray · white)"
+                    android:textAllCaps="false"
+                    android:textColor="@color/brand_navy"
+                    android:fontFamily="@font/poppins_semibold"
+                    app:cornerRadius="12dp"/>
+
                 <!-- Loading bar -->
                 <com.google.android.material.progressindicator.LinearProgressIndicator
                     android:id="@+id/progressPhone"
@@ -405,6 +442,17 @@
                                     android:textSize="12sp"
                                     android:textColor="@color/text_secondary"
                                     android:fontFamily="@font/poppins_regular"/>
+
+                        <!-- Which list this number was just filed under -->
+                        <TextView
+                            android:id="@+id/tvListStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp"
+                            android:fontFamily="@font/poppins_semibold"
+                            android:visibility="gone"/>
 
                             </LinearLayout>
 

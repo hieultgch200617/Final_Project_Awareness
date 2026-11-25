@@ -83,6 +83,8 @@ public class GuardianFragment extends Fragment {
 
     private void setupUrlScanner() {
         binding.btnScanUrl.setOnClickListener(v -> scanUrl());
+        binding.btnMyListsUrl.setOnClickListener(v ->
+                ListsSheet.show(requireContext(), ListsSheet.TYPE_SITES));
         binding.etUrl.setOnEditorActionListener((tv, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 scanUrl();
@@ -108,6 +110,7 @@ public class GuardianFragment extends Fragment {
         hideKeyboard();
         setUrlLoading(true);
         binding.cardUrlResult.setVisibility(View.GONE);
+        binding.tvUrlListStatus.setVisibility(View.GONE);
 
         repository.scanUrl(input, new GuardianRepository.UrlScanCallback() {
             @Override
@@ -144,6 +147,13 @@ public class GuardianFragment extends Fragment {
         binding.tvScannedUrl.setText(url);
         binding.tvUrlAdvice.setText(urlAdvice(rating));
 
+        // Which list was this website filed under? (the repository saves it; this just says so)
+        boolean listed = GuardianRepository.listKeyForUrl(url) != null;
+        binding.tvUrlListStatus.setText(listed
+                ? listStatusText(rating)
+                : "Not added to a list: couldn't read this address.");
+        binding.tvUrlListStatus.setVisibility(View.VISIBLE);
+
         binding.cardUrlResult.setVisibility(View.VISIBLE);
     }
 
@@ -179,6 +189,8 @@ public class GuardianFragment extends Fragment {
 
     private void setupPhoneChecker() {
         binding.btnCheckPhone.setOnClickListener(v -> checkPhone());
+        binding.btnMyLists.setOnClickListener(v ->
+                ListsSheet.show(requireContext(), ListsSheet.TYPE_PHONES));
         binding.etPhone.setOnEditorActionListener((tv, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 checkPhone();
@@ -202,6 +214,7 @@ public class GuardianFragment extends Fragment {
         setPhoneLoading(true);
         binding.cardPhoneResult.setVisibility(View.GONE);
         binding.cardPhoneAdvice.setVisibility(View.GONE);
+        binding.tvListStatus.setVisibility(View.GONE);
 
         repository.checkPhone(input, new GuardianRepository.PhoneCheckCallback() {
             @Override
@@ -245,6 +258,10 @@ public class GuardianFragment extends Fragment {
                 ? "Fraud score: " + r.getRiskScore() + " / 100"
                 : "Fraud score not available");
 
+        // Which list was this number filed under? (the repository saves it; this just says so)
+        binding.tvListStatus.setText(listStatusText(rating));
+        binding.tvListStatus.setVisibility(View.VISIBLE);
+
         binding.tvCarrier.setText(r.getCarrierName());
         binding.tvLineType.setText(r.getPhoneTypeDescription());
         binding.tvVoipStatus.setText(r.isVoip() ? "Yes — internet (VoIP) number" : "No");
@@ -254,6 +271,14 @@ public class GuardianFragment extends Fragment {
 
         binding.cardPhoneResult.setVisibility(View.VISIBLE);
         binding.cardPhoneAdvice.setVisibility(View.VISIBLE);
+    }
+
+    private String listStatusText(String rating) {
+        String list = GuardianRepository.listNameFor(rating);
+        if ("black".equals(list)) return "⛔ Added to your Blacklist";
+        if ("gray".equals(list))  return "⚠️ Added to your Graylist";
+        if ("white".equals(list)) return "✅ Added to your Whitelist";
+        return "Not added to a list: there's no clear result for this number.";
     }
 
     private String phoneAdvice(PhoneCheckResponse r) {

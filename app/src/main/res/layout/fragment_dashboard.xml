@@ -252,6 +252,37 @@
 
             </androidx.cardview.widget.CardView>
 
+            <!-- ── Server number lists (admins only) ─────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Server Number Lists"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:fontFamily="@font/poppins_bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Every phone number and website any user checks is added here once, filed as black / gray / white by its first result. Only admins can see it."
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:fontFamily="@font/poppins_regular"
+                android:layout_marginBottom="10dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnServerLists"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginBottom="24dp"
+                android:text="🗂 Open server black · gray · white lists"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:fontFamily="@font/poppins_semibold"
+                app:backgroundTint="@color/brand_navy"
+                app:cornerRadius="12dp"/>
+
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>

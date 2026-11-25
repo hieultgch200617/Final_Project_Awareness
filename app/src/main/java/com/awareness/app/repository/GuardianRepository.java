@@ -1,5 +1,6 @@
 package com.awareness.app.repository;
 
+import android.net.Uri;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -16,9 +17,14 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
 import com.google.gson.JsonParseException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -111,6 +117,7 @@ public class GuardianRepository {
                         }
 
                         logScanToFirestore("url", url, rating);
+                        saveSiteListEntry(url, rating, threatType);   // file it under black / gray / white
                         callback.onResult(rating, threatType);
                     }
 
@@ -190,6 +197,7 @@ public class GuardianRepository {
 
                         phoneCache.put(digits, body);
                         logScanToFirestore("phone", e164, body.getAppRating());
+                        savePhoneListEntry(e164, body);     // file it under black / gray / white
                         callback.onResult(body);
                     }
 
@@ -243,6 +251,201 @@ public class GuardianRepository {
         db.collection(Constants.COLLECTION_SCANS).add(log);
     }
 
+    // ── "My lists": black / gray / white ─────────────────────────
+
+    /**
+     * Which list a rating belongs to, or null when there is no verdict to file.
+     *   MALICIOUS  -> "black"      SUSPICIOUS -> "gray"      SAFE -> "white"
+     * (UNKNOWN results, such as an invalid number or no risk score, are not filed anywhere.)
+     */
+    public static String listNameFor(String rating) {
+        if (Constants.RATING_MALICIOUS.equals(rating))  return "black";
+        if (Constants.RATING_SUSPICIOUS.equals(rating)) return "gray";
+        if (Constants.RATING_SAFE.equals(rating))       return "white";
+        return null;
+    }
+
+    /**
+     * Saves the number and its details to users/{uid}/phone_lists/{digits}. The id is the number's
+     * digits, so checking the same number again UPDATES the entry (moving it to another list if its
+     * rating changed) and bumps its check counter. Private to the user: see firestore.rules.
+     *
+     * Fire-and-forget on purpose: Firestore keeps the write on the device and sends it when the
+     * connection allows, so a slow network never delays the result screen.
+     */
+    private void savePhoneListEntry(String e164, PhoneCheckResponse r) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        String rating = r.getAppRating();
+        String list = listNameFor(rating);
+        if (user == null || list == null) return;
+
+        List<String> signals = r.getWarningSigns();
+
+        // Keys must match firestore.rules (users/{uid}/phone_lists)
+        Map<String, Object> entry = new HashMap<>();
+        entry.put("number",      e164);
+        entry.put("list",        list);
+        entry.put("rating",      rating);
+        entry.put("fraudScore",  r.hasRiskScore() ? r.getRiskScore() : null);
+        entry.put("carrier",     r.getCarrierName());
+        entry.put("lineType",    r.getPhoneTypeDescription());
+        entry.put("countryCode", r.getCountryCode());
+        entry.put("voip",        r.isVoip());
+        entry.put("signals",     signals);
+        entry.put("checkedAt",   FieldValue.serverTimestamp());
+        entry.put("checkCount",  FieldValue.increment(1));
+
+        db.collection(Constants.COLLECTION_USERS).document(user.getUid())
+                .collection("phone_lists").document(e164.substring(1))
+                .set(entry, SetOptions.merge())
+                .addOnFailureListener(e -> {
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Couldn't save phone list entry", e);
+                });
+
+        // Also add it to the server's private list (admin-only), if it isn't there yet
+        saveServerListEntry(e164, rating, list, r, signals);
+    }
+
+    /**
+     * Adds the number to the SERVER's private list (collection "server_phone_lists", id = digits).
+     * Only admins can read it; the app can only CREATE entries, never change or read them.
+     *
+     * "If it isn't there yet" is enforced by the Firestore rules: they allow create but not update,
+     * so this plain set() succeeds for a new number and is refused for one that is already listed.
+     * That refusal is expected and ignored. The entry keeps the FIRST result seen for the number;
+     * it is never modified by later checks.
+     *
+     * No user id is stored with it, so admins can't tell who checked a number (users' own lists stay
+     * private even from admins).
+     */
+    private void saveServerListEntry(String e164, String rating, String list,
+                                     PhoneCheckResponse r, List<String> signals) {
+        // Keys must match firestore.rules (server_phone_lists)
+        Map<String, Object> entry = new HashMap<>();
+        entry.put("number",      e164);
+        entry.put("list",        list);
+        entry.put("rating",      rating);
+        entry.put("fraudScore",  r.hasRiskScore() ? r.getRiskScore() : null);
+        entry.put("carrier",     r.getCarrierName());
+        entry.put("lineType",    r.getPhoneTypeDescription());
+        entry.put("countryCode", r.getCountryCode());
+        entry.put("voip",        r.isVoip());
+        entry.put("signals",     signals);
+        entry.put("checkedAt",   FieldValue.serverTimestamp());   // here: when it was first added
+        entry.put("checkCount",  1);
+
+        db.collection("server_phone_lists").document(e164.substring(1))
+                .set(entry)
+                .addOnFailureListener(e -> {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "Not added to the server list (already listed, or rules refused): "
+                                + e.getMessage());
+                    }
+                });
+    }
+
+    // ── Websites: black / gray / white ───────────────────────────
+
+    /**
+     * The address as it is stored in the lists, or null if it has no readable host:
+     *   "HTTPS://Example.com/Login/?token=abc#x"  ->  "https://example.com/Login"
+     * Lower-cased scheme and host, no trailing slash, and the query string (?...) and fragment (#...)
+     * are DROPPED, because links often carry private tokens (password resets, session ids) that must
+     * never be written to a database. The Firestore rules refuse any stored URL that contains ? or #.
+     */
+    public static String listUrlFor(String rawUrl) {
+        try {
+            String raw = rawUrl.trim();
+            if (!hasHttpScheme(raw)) raw = "https://" + raw;
+            Uri uri = Uri.parse(raw);
+            String host = uri.getHost();
+            if (host == null || host.isEmpty()) return null;
+
+            String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase(Locale.US) : "https";
+            String path = uri.getEncodedPath() != null ? uri.getEncodedPath() : "";
+            while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
+            int port = uri.getPort();
+
+            String url = scheme + "://" + host.toLowerCase(Locale.US) + (port > 0 ? ":" + port : "") + path;
+            return url.length() <= 500 ? url : url.substring(0, 500);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * True if the text already starts with http:// or https:// in ANY letter case. The old checks were
+     * case-sensitive, so "HTTPS://Example.com" became "https://HTTPS://Example.com" and the wrong
+     * address was scanned.
+     */
+    private static boolean hasHttpScheme(String s) {
+        String lower = s.toLowerCase(Locale.US);
+        return lower.startsWith("http://") || lower.startsWith("https://");
+    }
+
+    /** The document id for a website: SHA-256 of its stored address (a URL can't be a document id). */
+    public static String listKeyForUrl(String rawUrl) {
+        String url = listUrlFor(rawUrl);
+        return url == null ? null : sha256Hex(url);
+    }
+
+    private static String sha256Hex(String s) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte x : digest) sb.append(String.format(Locale.US, "%02x", x));
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);   // every Android device has SHA-256
+        }
+    }
+
+    /**
+     * Files a scanned website into the user's private list AND the server's private list, exactly like
+     * phone numbers (see savePhoneListEntry). The same rating -> list rule applies.
+     *   users/{uid}/site_lists/{hash}  : updated on every check (list may change, counter goes up)
+     *   server_site_lists/{hash}       : created once, never updated, admin-only (see firestore.rules)
+     */
+    private void saveSiteListEntry(String scannedUrl, String rating, String threatType) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        String list = listNameFor(rating);
+        String url = listUrlFor(scannedUrl);
+        if (user == null || list == null || url == null) return;
+
+        String key = sha256Hex(url);
+        String host = Uri.parse(url).getHost();
+
+        // Keys must match firestore.rules (site_lists / server_site_lists)
+        Map<String, Object> entry = new HashMap<>();
+        entry.put("url",        url);
+        entry.put("host",       host != null ? host : "");
+        entry.put("list",       list);
+        entry.put("rating",     rating);
+        entry.put("threatType", threatType);               // null when nothing was found
+        entry.put("checkedAt",  FieldValue.serverTimestamp());
+        entry.put("checkCount", FieldValue.increment(1));
+
+        db.collection(Constants.COLLECTION_USERS).document(user.getUid())
+                .collection("site_lists").document(key)
+                .set(entry, SetOptions.merge())
+                .addOnFailureListener(e -> {
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Couldn't save site list entry", e);
+                });
+
+        // Server list: created once, so a plain set(). A second write for the same address is refused
+        // by the rules (no updates), which is expected and ignored.
+        Map<String, Object> serverEntry = new HashMap<>(entry);
+        serverEntry.put("checkCount", 1);
+        db.collection("server_site_lists").document(key)
+                .set(serverEntry)
+                .addOnFailureListener(e -> {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "Site not added to the server list (already listed, or rules refused): "
+                                + e.getMessage());
+                    }
+                });
+    }
+
     // ── Retrofit clients ─────────────────────────────────────────
 
     private SafeBrowsingApiService buildSafeBrowsingClient() {
@@ -284,7 +487,7 @@ public class GuardianRepository {
 
     private String normalizeUrl(String url) {
         url = url.trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        if (!hasHttpScheme(url)) {
             return "https://" + url;
         }
         return url;

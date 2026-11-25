@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.awareness.app.databinding.FragmentDashboardBinding;
+import com.awareness.app.ui.guardian.ListsSheet;
 import com.awareness.app.utils.Constants;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
@@ -35,6 +36,7 @@ public class DashboardFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        binding.btnServerLists.setOnClickListener(v -> ListsSheet.showServer(requireContext()));
         loadStats();
         loadRecentScans();
         loadScamTypeBreakdown();
